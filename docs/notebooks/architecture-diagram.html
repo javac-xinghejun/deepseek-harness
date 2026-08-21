@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeepSeek Harness 架构图</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'JetBrains Mono', 'Noto Sans SC', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      margin-bottom: 2rem;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #22d3ee;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      margin-left: 1.75rem;
+    }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+
+    svg {
+      width: 100%;
+      min-width: 900px;
+      display: block;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+
+    .card h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .card ul {
+      list-style: none;
+      color: #94a3b8;
+      font-size: 0.75rem;
+    }
+
+    .card li {
+      margin-bottom: 0.375rem;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: #475569;
+      font-size: 0.75rem;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-shrink: 0;
+      align-items: center;
+    }
+    .toolbar-toggle {
+      background: transparent;
+      border: none;
+      color: #475569;
+      cursor: pointer;
+      font-size: 1.25rem;
+      line-height: 1;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      transition: color 0.2s, background 0.2s;
+    }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions {
+      display: none;
+      gap: 0.5rem;
+    }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #334155;
+      color: #94a3b8;
+      padding: 0.375rem 0.75rem;
+      border-radius: 0.375rem;
+      font-family: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .toolbar-actions button:hover {
+      background: rgba(51, 65, 85, 0.8);
+      color: white;
+      border-color: #475569;
+    }
+
+    @media print {
+      body { background: #020617; padding: 1rem; }
+      .toolbar { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>DeepSeek Harness Architecture</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">everything is a plugin —— vendored Cordis 插件树上的 agent 运行时</p>
+    </div>
+
+    <!-- Main Diagram -->
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 750">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowhead-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          </marker>
+          <marker id="arrowhead-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background Grid -->
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ============ 入口层 ============ -->
+        <rect x="40" y="30" width="190" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="135" y="50" fill="white" font-size="11" font-weight="600" text-anchor="middle">浏览器 Web UI</text>
+        <text x="135" y="66" fill="#94a3b8" font-size="9" text-anchor="middle">apps/web · ui-* 插件</text>
+        <text x="135" y="80" fill="#94a3b8" font-size="8" text-anchor="middle">经 host 网关读写会话</text>
+
+        <rect x="270" y="30" width="190" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="365" y="50" fill="white" font-size="11" font-weight="600" text-anchor="middle">dsh CLI 启动器</text>
+        <text x="365" y="66" fill="#94a3b8" font-size="9" text-anchor="middle">apps/cli</text>
+        <text x="365" y="80" fill="#94a3b8" font-size="8" text-anchor="middle">web / headless / 自定义 profile</text>
+
+        <rect x="500" y="30" width="210" height="60" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="605" y="50" fill="white" font-size="11" font-weight="600" text-anchor="middle">ACP · TS SDK · Python SDK</text>
+        <text x="605" y="66" fill="#94a3b8" font-size="9" text-anchor="middle">自动化与嵌入集成</text>
+        <text x="605" y="80" fill="#94a3b8" font-size="8" text-anchor="middle">stdio / JSON-RPC</text>
+
+        <!-- 入口箭头 -->
+        <line x1="135" y1="92" x2="135" y2="126" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="143" y="112" fill="#94a3b8" font-size="8">HTTP</text>
+        <line x1="365" y1="92" x2="365" y2="126" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="373" y="112" fill="#94a3b8" font-size="8">启动加载</text>
+        <line x1="605" y1="92" x2="605" y2="126" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="613" y="112" fill="#94a3b8" font-size="8">协议接入</text>
+
+        <!-- ============ Profile 组装层 ============ -->
+        <rect x="30" y="130" width="940" height="104" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="44" y="150" fill="#fbbf24" font-size="10" font-weight="600">Profile 组装层 —— bundles 按序叠加 + patch 层叠（apps/cli）</text>
+
+        <rect x="60" y="162" width="150" height="56" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="135" y="184" fill="white" font-size="11" font-weight="600" text-anchor="middle">dsh-base</text>
+        <text x="135" y="200" fill="#94a3b8" font-size="9" text-anchor="middle">必选底层能力</text>
+
+        <rect x="230" y="162" width="150" height="56" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="305" y="184" fill="white" font-size="11" font-weight="600" text-anchor="middle">dsh-web-app</text>
+        <text x="305" y="200" fill="#94a3b8" font-size="9" text-anchor="middle">Web 应用组合</text>
+
+        <rect x="400" y="162" width="150" height="56" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="475" y="184" fill="white" font-size="11" font-weight="600" text-anchor="middle">dsh-headless</text>
+        <text x="475" y="200" fill="#94a3b8" font-size="9" text-anchor="middle">一次性执行</text>
+
+        <rect x="570" y="162" width="170" height="56" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="655" y="184" fill="white" font-size="11" font-weight="600" text-anchor="middle">cordis.patch.yml</text>
+        <text x="655" y="200" fill="#94a3b8" font-size="9" text-anchor="middle">用户补丁层</text>
+
+        <rect x="760" y="162" width="120" height="56" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="820" y="184" fill="white" font-size="11" font-weight="600" text-anchor="middle">--patch</text>
+        <text x="820" y="200" fill="#94a3b8" font-size="9" text-anchor="middle">命令行覆盖</text>
+
+        <!-- ============ Cordis 插件树 ============ -->
+        <rect x="30" y="258" width="940" height="322" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="44" y="278" fill="#fbbf24" font-size="10" font-weight="600">Cordis Context 插件树 —— vendor/ @deepseek-ai/cordis（everything is a plugin）</text>
+
+        <!-- Row 1: core spine -->
+        <rect x="50" y="302" width="172" height="62" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="136" y="326" fill="white" font-size="11" font-weight="600" text-anchor="middle">ctx.sessions</text>
+        <text x="136" y="342" fill="#94a3b8" font-size="9" text-anchor="middle">append-only 会话日志</text>
+
+        <rect x="232" y="302" width="172" height="62" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="318" y="326" fill="white" font-size="11" font-weight="600" text-anchor="middle">ctx.systemPrompt</text>
+        <text x="318" y="342" fill="#94a3b8" font-size="9" text-anchor="middle">prompt 与 schema 组装</text>
+
+        <rect x="414" y="302" width="172" height="62" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="500" y="326" fill="white" font-size="11" font-weight="600" text-anchor="middle">ctx.tools</text>
+        <text x="500" y="342" fill="#94a3b8" font-size="9" text-anchor="middle">注册表 + 执行管线</text>
+
+        <rect x="596" y="302" width="172" height="62" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="682" y="326" fill="white" font-size="11" font-weight="600" text-anchor="middle">ctx.agents · agentLoop</text>
+        <text x="682" y="342" fill="#94a3b8" font-size="9" text-anchor="middle">Agent 接口与默认驱动</text>
+
+        <rect x="778" y="302" width="172" height="62" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="864" y="322" fill="white" font-size="11" font-weight="600" text-anchor="middle">session log</text>
+        <text x="864" y="338" fill="#94a3b8" font-size="9" text-anchor="middle">JSONL · SQLite 后端</text>
+        <text x="864" y="354" fill="#a78bfa" font-size="7" text-anchor="middle">model-visible ⟺ logged</text>
+
+        <!-- sessions 追加事件到 log（绕行弧线） -->
+        <path d="M 136 302 L 136 288 L 864 288 L 864 298" fill="none" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead-violet)"/>
+        <text x="500" y="284" fill="#a78bfa" font-size="8" text-anchor="middle">追加事件</text>
+
+        <!-- Row 2: capability seams -->
+        <rect x="50" y="402" width="172" height="62" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="136" y="426" fill="white" font-size="11" font-weight="600" text-anchor="middle">ctx.shell</text>
+        <text x="136" y="442" fill="#94a3b8" font-size="9" text-anchor="middle">bash / pwsh 执行器</text>
+
+        <rect x="232" y="402" width="172" height="62" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="318" y="426" fill="white" font-size="11" font-weight="600" text-anchor="middle">ctx.fs</text>
+        <text x="318" y="442" fill="#94a3b8" font-size="9" text-anchor="middle">文件读 / 写 / 编辑</text>
+
+        <rect x="414" y="402" width="172" height="62" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="500" y="426" fill="white" font-size="11" font-weight="600" text-anchor="middle">ctx.subprocess</text>
+        <text x="500" y="442" fill="#94a3b8" font-size="9" text-anchor="middle">进程树拉起与回收</text>
+
+        <rect x="596" y="402" width="172" height="62" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="682" y="426" fill="white" font-size="11" font-weight="600" text-anchor="middle">ctx.sandbox</text>
+        <text x="682" y="442" fill="#94a3b8" font-size="9" text-anchor="middle">进程约束策略</text>
+
+        <rect x="778" y="402" width="172" height="62" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="864" y="422" fill="white" font-size="11" font-weight="600" text-anchor="middle">ctx.web · subagents …</text>
+        <text x="864" y="438" fill="#94a3b8" font-size="8" text-anchor="middle">搜索 / 委派 / 终端 / LSP</text>
+        <text x="864" y="452" fill="#94a3b8" font-size="8" text-anchor="middle">skill / jobs / workflow 等</text>
+
+        <!-- tools 调用 seams -->
+        <line x1="500" y1="364" x2="500" y2="398" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="508" y="384" fill="#94a3b8" font-size="8">工具调用</text>
+
+        <!-- Row 3: providers -->
+        <rect x="50" y="502" width="172" height="62" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="136" y="526" fill="white" font-size="11" font-weight="600" text-anchor="middle">bash-local / sandbox</text>
+        <text x="136" y="542" fill="#94a3b8" font-size="9" text-anchor="middle">本地或沙箱执行</text>
+
+        <rect x="232" y="502" width="172" height="62" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="318" y="526" fill="white" font-size="11" font-weight="600" text-anchor="middle">fs-local / fs-e2b</text>
+        <text x="318" y="542" fill="#94a3b8" font-size="9" text-anchor="middle">本地或远程文件</text>
+
+        <rect x="414" y="502" width="172" height="62" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="500" y="526" fill="white" font-size="11" font-weight="600" text-anchor="middle">subprocess-local / e2b</text>
+        <text x="500" y="542" fill="#94a3b8" font-size="9" text-anchor="middle">本地或云端进程</text>
+
+        <rect x="596" y="502" width="172" height="62" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="682" y="526" fill="white" font-size="11" font-weight="600" text-anchor="middle">Landlock 原生 addon</text>
+        <text x="682" y="542" fill="#94a3b8" font-size="9" text-anchor="middle">native/ node-addon</text>
+
+        <rect x="778" y="502" width="172" height="62" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="864" y="526" fill="white" font-size="11" font-weight="600" text-anchor="middle">deepseek · exa · codex …</text>
+        <text x="864" y="542" fill="#94a3b8" font-size="9" text-anchor="middle">各 provider 家族适配器</text>
+
+        <!-- seam → provider 实现箭头 -->
+        <line x1="136" y1="464" x2="136" y2="498" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="318" y1="464" x2="318" y2="498" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="500" y1="464" x2="500" y2="498" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="682" y1="464" x2="682" y2="498" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrowhead-rose)"/>
+        <line x1="864" y1="464" x2="864" y2="498" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="33" y="486" fill="#94a3b8" font-size="8">实现</text>
+
+        <!-- ============ 进程外世界 ============ -->
+        <text x="33" y="592" fill="#94a3b8" font-size="8">进程外</text>
+
+        <rect x="50" y="606" width="172" height="56" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="136" y="628" fill="white" font-size="11" font-weight="600" text-anchor="middle">本地 OS</text>
+        <text x="136" y="644" fill="#94a3b8" font-size="9" text-anchor="middle">文件系统 · 进程树</text>
+
+        <rect x="232" y="606" width="172" height="56" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="318" y="628" fill="white" font-size="11" font-weight="600" text-anchor="middle">E2B 云沙箱</text>
+        <text x="318" y="644" fill="#94a3b8" font-size="9" text-anchor="middle">远程 Linux 执行世界</text>
+
+        <rect x="414" y="606" width="172" height="56" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="500" y="628" fill="white" font-size="11" font-weight="600" text-anchor="middle">MCP servers</text>
+        <text x="500" y="644" fill="#94a3b8" font-size="9" text-anchor="middle">外部工具桥接</text>
+
+        <rect x="596" y="606" width="172" height="56" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="682" y="628" fill="white" font-size="11" font-weight="600" text-anchor="middle">Linux 内核</text>
+        <text x="682" y="644" fill="#94a3b8" font-size="9" text-anchor="middle">Landlock · Seatbelt · bwrap</text>
+
+        <rect x="778" y="606" width="172" height="56" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="864" y="628" fill="white" font-size="11" font-weight="600" text-anchor="middle">DeepSeek API</text>
+        <text x="864" y="644" fill="#94a3b8" font-size="9" text-anchor="middle">chat 流式补全</text>
+
+        <!-- provider → 外部世界 -->
+        <line x1="136" y1="564" x2="136" y2="602" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="318" y1="564" x2="318" y2="602" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="500" y1="564" x2="500" y2="602" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="682" y1="564" x2="682" y2="602" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrowhead-rose)"/>
+        <line x1="864" y1="564" x2="864" y2="602" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- ============ 图例（区域之外） ============ -->
+        <rect x="40" y="704" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="62" y="712" fill="#94a3b8" font-size="8">应用入口</text>
+
+        <rect x="175" y="704" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="197" y="712" fill="#94a3b8" font-size="8">核心服务 spine</text>
+
+        <rect x="330" y="704" width="16" height="10" rx="2" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1"/>
+        <text x="352" y="712" fill="#94a3b8" font-size="8">能力 seam 接口</text>
+
+        <rect x="480" y="704" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="502" y="712" fill="#94a3b8" font-size="8">安全约束</text>
+
+        <rect x="600" y="704" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="622" y="712" fill="#94a3b8" font-size="8">Provider 实现</text>
+
+        <rect x="750" y="704" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="772" y="712" fill="#94a3b8" font-size="8">会话数据</text>
+
+        <rect x="870" y="704" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="892" y="712" fill="#94a3b8" font-size="8">外部世界</text>
+
+        <line x1="40" y1="732" x2="56" y2="732" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="4,3"/>
+        <text x="62" y="735" fill="#94a3b8" font-size="8">约束 / 包裹 argv 的安全流</text>
+        <line x1="280" y1="732" x2="296" y2="732" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="302" y="735" fill="#94a3b8" font-size="8">调用 / 数据流</text>
+        <text x="450" y="735" fill="#475569" font-size="8">seam 列非穷尽：approval · compaction · lsp · skill · spill · terminal · workflow 等同属此层</text>
+      </svg>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>一切皆插件</h3>
+        </div>
+        <ul>
+          <li>• vendor/ 的 Cordis：context 是服务仓库，服务按 ctx key 相互发现</li>
+          <li>• inject 声明依赖，加载顺序自动求解</li>
+          <li>• 注册即可逆 effect，插件卸载即回卷</li>
+          <li>• waterfall 监听器必须 next() 委托，否则短路</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>三角色 capability seam</h3>
+        </div>
+        <ul>
+          <li>• Service Definition 声明接口，Provider 实现，Consumer 使用</li>
+          <li>• Provider 可整体替换：local ↔ E2B 远程执行世界</li>
+          <li>• Consumer 多为模型工具（tool-bash、tool-fs…）</li>
+          <li>• 换一个 provider，bash / PTY / LSP 一起搬家</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>日志即真相</h3>
+        </div>
+        <ul>
+          <li>• append-only SessionEvent 流是唯一事实源</li>
+          <li>• model-visible ⟺ logged 由运行时不变量断言</li>
+          <li>• deriveMessages() 从日志投影模型历史</li>
+          <li>• fork / resume / 回放 / 遥测全部从这条流派生</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <p class="footer">
+      DeepSeek Harness (dsh) · docs/notebooks 学习笔记 · 2026-08-21
+    </p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = 'deepseek-harness-architecture.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('deepseek-harness-architecture.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>
