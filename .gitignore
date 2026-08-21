@@ -39,3 +39,7 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
+
+.claude/settings.local.*
+.omc/
+docs/notebooks/*.pdf
