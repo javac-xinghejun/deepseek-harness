@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { composeEntries, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import { apply, inject, name } from '../src/index.ts'
 import { apply as applyInvariant, inject as invariantInject, name as invariantName } from '../src/invariant.ts'
@@ -37,7 +38,9 @@ describe('desktop bundle composition', () => {
   it('changes only the browser handoff relative to the web profile stack', () => {
     // Guard against the restatement silently normalizing keys the web bundle
     // owns: without the desktop layer the handoff stays the startup expression.
-    const [, webApp] = desktopLayers()
+    // A missing web-app layer is a repo misconfiguration, not an empty stack.
+    const webApp = desktopLayers()[1]
+    if (webApp === undefined) throw new Error('web-app patch layer failed to load')
     const entries = composeEntries([webApp])
     const row = entries.find(entry => entry.id === 'web-runtime')
     expect(row?.config).toMatchObject({ openBrowser: { __jsExpr: 'ctx.webStartup.openBrowser' } })

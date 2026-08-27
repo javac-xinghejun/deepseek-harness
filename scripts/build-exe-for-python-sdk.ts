@@ -9,12 +9,12 @@
 import { statSync } from 'node:fs'
 import { chmod, copyFile, mkdir } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
-import { parseArgs } from 'node:util'
 import {
   DEFAULT_NODE_RANGE,
   PKG_SPEC,
   injectPkgConfig,
   packTarget,
+  parseExeBuildCli,
   prepareDeployStaging,
   printProducts,
   pnpmBin,
@@ -128,7 +128,8 @@ class Target {
 }
 
 /**
- * Validated CLI configuration; construction owns help and parse-error exits.
+ * Validated CLI configuration; parsing flows through the shared exe-packaging
+ * parser with this script's target rules and usage text.
  */
 class BuildCli {
   private constructor(
@@ -147,65 +148,28 @@ class BuildCli {
    * @returns the parsed, validated configuration.
    */
   static parse(argv: string[]): BuildCli {
-    let values: ReturnType<typeof BuildCli.parseRaw>
-    try {
-      values = BuildCli.parseRaw(argv)
-    } catch (error) {
-      console.error(`build-exe-for-python-sdk: ${error instanceof Error ? error.message : String(error)}\n`)
-      console.error(BuildCli.usage())
-      process.exit(1)
-    }
-    if (values.help) {
-      console.log(BuildCli.usage())
-      process.exit(0)
-    }
-    const targets = values.targets === undefined
-      ? [Target.host()]
-      : values.targets.split(',').map(part => part.trim()).filter(part => part !== '').map(spec => Target.parse(spec))
-    if (targets.length === 0) throw new Error('build-exe-for-python-sdk: --targets is empty.')
-    const seen = new Set<string>()
-    for (const target of targets) {
-      const key = `${target.platform}-${target.arch}`
-      if (seen.has(key)) {
-        throw new Error(`build-exe-for-python-sdk: duplicate platform-arch ${key} in --targets; canonical product names would collide.`)
-      }
-      seen.add(key)
-    }
-    return new BuildCli(targets, values['skip-build'], values['dry-run'])
-  }
-
-  private static parseRaw(argv: string[]) {
-    return parseArgs({
-      args: argv,
-      options: {
-        'targets': { type: 'string' },
-        'skip-build': { type: 'boolean', default: false },
-        'dry-run': { type: 'boolean', default: false },
-        'help': { type: 'boolean', default: false },
-      },
-    }).values
-  }
-
-  private static usage(): string {
-    return [
-      'Usage: pnpm exec tsx scripts/build-exe-for-python-sdk.ts [flags]',
-      '',
-      '  --targets=<t1,t2,...>  pkg targets, e.g. node24-linux-x64,node24-linux-arm64,node24-macos-arm64.',
-      '                         Default: the host platform only (on node24).',
-      '  --skip-build           skip `pnpm run build` (lib/ artifacts must already exist).',
-      '  --dry-run              print every command and config patch without executing.',
-      '  --help                 print this help.',
-      '',
-      `Build route: ${PKG_SPEC} --sea; see .agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md.`,
-      `Stages the node carrier in ${PYTHON_RUNTIME_DIR}/${PYTHON_NODE_SUBDIR} and writes executables to ${OUT_DIR}/.`,
-    ].join('\n')
+    const parsed = parseExeBuildCli(argv, {
+      logPrefix: 'build-exe-for-python-sdk',
+      usage: () => [
+        'Usage: pnpm exec tsx scripts/build-exe-for-python-sdk.ts [flags]',
+        '',
+        '  --targets=<t1,t2,...>  pkg targets, e.g. node24-linux-x64,node24-linux-arm64,node24-macos-arm64.',
+        '                         Default: the host platform only (on node24).',
+        '  --skip-build           skip `pnpm run build` (lib/ artifacts must already exist).',
+        '  --dry-run              print every command and config patch without executing.',
+        '  --help                 print this help.',
+        '',
+        `Build route: ${PKG_SPEC} --sea; see .agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md.`,
+        `Stages the node carrier in ${PYTHON_RUNTIME_DIR}/${PYTHON_NODE_SUBDIR} and writes executables to ${OUT_DIR}/.`,
+      ].join('\n'),
+      parseTarget: spec => Target.parse(spec),
+      defaultTargets: () => [Target.host()],
+      key: target => `${target.platform}-${target.arch}`,
+    })
+    return new BuildCli(parsed.targets, parsed.skipBuild, parsed.dryRun)
   }
 }
 
-/**
- * Sequential build pipeline over the shared staging machinery plus the
- * SDK-specific Python sync.
- */
 class SingleExeBuild {
   /**
    * The cleared deploy target, pkg input, and Python node-mode carrier. The
@@ -327,7 +291,7 @@ class SingleExeBuild {
   }
 }
 
-await main()
+if (import.meta.main) await main()
 
 async function main(): Promise<void> {
   const cli = BuildCli.parse(process.argv.slice(2))

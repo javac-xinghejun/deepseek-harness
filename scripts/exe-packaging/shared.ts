@@ -8,9 +8,10 @@
  */
 
 import { spawn } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, globSync, readFileSync, statSync } from 'node:fs'
 import { chmod, copyFile, cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
+import { parseArgs } from 'node:util'
 import { resolveLinuxNodePtyAddon } from '../build-exe-for-python-sdk-native-pty.ts'
 
 /** Pinned for reproducible builds. */
@@ -94,6 +95,12 @@ export interface DeployStagingOptions extends SharedStepOptions {
    * of inside the target; the source each missing dependency restores from.
    */
   hoistSourceNodeModules?: string
+  /**
+   * Packages legacy deploy can drop entirely because they enter the closure
+   * through overrides that hoisting never hoists (linked vendored peers), mapped
+   * to their real repository directories (absolute or root-relative).
+   */
+  extraPackageSources?: Readonly<Record<string, string>>
 }
 
 /**
@@ -120,7 +127,10 @@ export async function prepareDeployStaging(options: DeployStagingOptions): Promi
     stagingDir,
   ])
   if (options.hoistSourceNodeModules !== undefined) {
-    await restoreLegacyHoists(options)
+    await restoreLegacyHoists({ ...options, hoistSourceNodeModules: options.hoistSourceNodeModules })
+  }
+  if (options.extraPackageSources !== undefined) {
+    await restoreOverridePackages(options)
   }
   await materializeStagedLinks(options)
   if (options.dryRun) {
@@ -157,13 +167,7 @@ async function restoreLegacyHoists(options: DeployStagingOptions & Required<Pick
         `${options.logPrefix}: deployed dependency ${dependency} is absent from both ${destination} and ${source}.`,
       )
     }
-    await mkdir(dirname(destination), { recursive: true })
-    const nestedNodeModules = join(source, 'node_modules')
-    await cp(source, destination, {
-      recursive: true,
-      dereference: true,
-      filter: path => path !== nestedNodeModules && !path.startsWith(nestedNodeModules + sep),
-    })
+    await copyDereferenced(source, destination)
     restored.push(dependency)
   }
   const stillMissing = Object.keys(manifest.dependencies ?? {})
@@ -173,6 +177,139 @@ async function restoreLegacyHoists(options: DeployStagingOptions & Required<Pick
   }
   if (restored.length > 0) {
     console.log(`${options.logPrefix}: restored legacy deploy hoists: ${restored.join(', ')}`)
+  }
+}
+
+/** Options for {@link restoreWorkspaceClosure}. */
+export interface WorkspaceClosureOptions extends SharedStepOptions {
+  /** Staged closure directory receiving missing workspace packages. */
+  stagingDir: string
+  /** Directory of the app manifest whose transitive graph defines the closure. */
+  anchorDir: string
+}
+
+interface ClosureManifest {
+  name?: string
+  dependencies?: Record<string, string>
+  optionalDependencies?: Record<string, string>
+  peerDependencies?: Record<string, string>
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>
+}
+
+/**
+ * Discover every workspace member by manifest walk across the standard globs
+ * (apps, nested packages, vendor roots). Later discoveries win, mirroring
+ * Node's nearest-wins resolution when a name repeats.
+ */
+function discoverWorkspaceMembers(root: string): Map<string, string> {
+  const members = new Map<string, string>()
+  const manifests = [
+    ...globSync('apps/*/package.json', { cwd: root }),
+    ...globSync('packages/*/*/package.json', { cwd: root }),
+    ...globSync('vendor/*/package.json', { cwd: root }),
+    ...globSync('native/landlock-run/packages/*/package.json', { cwd: root }),
+  ]
+  for (const manifestPath of manifests.sort()) {
+    const directory = resolve(root, dirname(manifestPath))
+    try {
+      const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as ClosureManifest
+      if (manifest.name !== undefined && manifest.name !== '') members.set(manifest.name, directory)
+    } catch {
+      // A manifest outside our namespace (website, examples leaves) is not
+      // part of any runtime closure; skipping keeps discovery tolerant.
+    }
+  }
+  return members
+}
+
+/**
+ * Fill in staged packages legacy deploy omitted entirely: anything reachable
+ * from the anchor's dependency graph that the flat tree lacks gets copied
+ * dereferenced from its repository source, so a bundled runtime never boots
+ * with half its plugin closure.
+ */
+export async function restoreWorkspaceClosure(options: WorkspaceClosureOptions): Promise<void> {
+  if (options.dryRun) {
+    console.log(`${options.logPrefix}: [dry-run] restore missing workspace closure packages`)
+    return
+  }
+  const members = discoverWorkspaceMembers(options.root)
+  const anchorManifest = JSON.parse(
+    readFileSync(join(resolve(options.root, options.anchorDir), 'package.json'), 'utf8'),
+  ) as ClosureManifest
+
+  const queue: string[] = []
+  const seen = new Set<string>()
+  const enqueue = (manifest: ClosureManifest): void => {
+    const sections = { ...manifest.dependencies, ...manifest.optionalDependencies }
+    for (const name of Object.keys(sections)) {
+      if (!members.has(name) || seen.has(name)) continue
+      seen.add(name)
+      queue.push(name)
+    }
+    for (const peer of Object.keys(manifest.peerDependencies ?? {})) {
+      if (!members.has(peer) || seen.has(peer)) continue
+      if (manifest.peerDependenciesMeta?.[peer]?.optional === true) continue
+      seen.add(peer)
+      queue.push(peer)
+    }
+  }
+  enqueue(anchorManifest)
+  for (let index = 0; index < queue.length; index += 1) {
+    const name = queue[index]
+    if (name === undefined) continue
+    const directory = members.get(name)
+    if (directory === undefined) continue
+    enqueue(JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as ClosureManifest)
+  }
+
+  let restored: string[] = []
+  for (const name of queue) {
+    const destination = join(options.stagingDir, 'node_modules', name)
+    if (existsSync(destination)) continue
+    const sourceDirectory = members.get(name)
+    if (sourceDirectory === undefined) continue
+    await copyDereferenced(sourceDirectory, destination)
+    restored.push(name)
+  }
+  restored = restored.sort()
+  if (restored.length > 0) {
+    console.log(`${options.logPrefix}: restored ${String(restored.length)} workspace closure package(s): `
+      + restored.map(name => relative('', name)).join(', '))
+  }
+}
+
+/** Copy one package directory dereferenced, dropping nested node_modules trees. */
+async function copyDereferenced(sourceDir: string, destinationDir: string): Promise<void> {
+  await mkdir(dirname(destinationDir), { recursive: true })
+  const nestedNodeModules = join(sourceDir, 'node_modules')
+  await cp(sourceDir, destinationDir, {
+    recursive: true,
+    dereference: true,
+    filter: path => path !== nestedNodeModules && !path.startsWith(nestedNodeModules + sep),
+  })
+}
+
+/**
+ * Restore packages whose override-mediated linkage makes legacy deploy skip
+ * them outright; each named package must already sit in its mapped source or
+ * the stage fails loud rather than shipping a runtime with a missing peer.
+ */
+async function restoreOverridePackages(
+  options: DeployStagingOptions & Required<Pick<DeployStagingOptions, 'extraPackageSources'>>,
+): Promise<void> {
+  if (options.dryRun) {
+    console.log(`${options.logPrefix}: [dry-run] restore override-linked packages`)
+    return
+  }
+  for (const [packageName, relative] of Object.entries(options.extraPackageSources).sort()) {
+    const destination = join(options.stagingDir, 'node_modules', packageName)
+    if (existsSync(destination)) continue
+    const source = resolve(options.root, relative)
+    if (!existsSync(source)) {
+      throw new Error(`${options.logPrefix}: override package ${packageName} has no source directory at ${source}.`)
+    }
+    await copyDereferenced(source, destination)
   }
 }
 
@@ -389,4 +526,77 @@ export function printProducts(products: readonly string[], options: Pick<SharedS
     const megabytes = statSync(path).size / (1024 * 1024)
     console.log(`  ${path}  (${megabytes.toFixed(1)} MB)`)
   }
+}
+
+/**
+ * Parsed CLI face shared by every exe packaging script: one flag trio
+ * (`--targets`, `--skip-build`, `--dry-run`, `--help`) with script-specific
+ * target parsing supplied through {@link ExeCliOptions}.
+ */
+export interface ExePackagingCli<T> {
+  /** Targets parsed via {@link ExeCliOptions.parseTarget}; defaults when `--targets` is absent. */
+  readonly targets: readonly T[]
+  /** Skip step 1 (`pnpm run build`); lib/ artifacts must already exist. */
+  readonly skipBuild: boolean
+  /** Print every command and config patch instead of executing. */
+  readonly dryRun: boolean
+}
+
+/** Script-specific behavior hooks for {@link parseExeBuildCli}. */
+export interface ExeCliOptions<T> {
+  /** Log prefix naming the calling pipeline on errors. */
+  logPrefix: string
+  /** The script's own multi-line usage text printed for --help and errors. */
+  usage(): string
+  /** Parse one raw `--targets` entry; throws with the caller's message on bad input. */
+  parseTarget(spec: string): T
+  /** Default target set when `--targets` is absent. */
+  defaultTargets(): readonly T[]
+  /** Duplicate-detection key per target (thrown verbatim in the diagnostic). */
+  key(target: T): string
+}
+
+/**
+ * Parse argv for an exe packaging script. Help exits 0; malformed flags exit 1;
+ * unknown flags become positional-argument errors; empty or duplicating target
+ * lists throw.
+ * @param argv - the raw arguments (`process.argv.slice(2)`).
+ * @param options - script-specific hooks; see {@link ExeCliOptions}.
+ * @returns the validated invocation.
+ */
+export function parseExeBuildCli<T>(argv: string[], options: ExeCliOptions<T>): ExePackagingCli<T> {
+  let values: ReturnType<typeof parseArgs>['values']
+  try {
+    values = parseArgs({
+      args: argv,
+      options: {
+        'targets': { type: 'string' },
+        'skip-build': { type: 'boolean', default: false },
+        'dry-run': { type: 'boolean', default: false },
+        'help': { type: 'boolean', default: false },
+      },
+    }).values
+  } catch (error) {
+    console.error(`${options.logPrefix}: ${error instanceof Error ? error.message : String(error)}\n`)
+    console.error(options.usage())
+    process.exit(1)
+  }
+  if (values.help === true) {
+    console.log(options.usage())
+    process.exit(0)
+  }
+  const specs = values.targets === undefined
+    ? undefined
+    : values.targets.split(',').map(part => part.trim()).filter(part => part !== '')
+  const targets = specs === undefined
+    ? [...options.defaultTargets()]
+    : specs.map(spec => options.parseTarget(spec))
+  if (targets.length === 0) throw new Error(`${options.logPrefix}: --targets is empty.`)
+  const seen = new Set<string>()
+  for (const target of targets) {
+    const id = options.key(target)
+    if (seen.has(id)) throw new Error(`${options.logPrefix}: duplicate target key ${JSON.stringify(id)} in --targets.`)
+    seen.add(id)
+  }
+  return { targets, skipBuild: values['skip-build'] === true, dryRun: values['dry-run'] === true }
 }
