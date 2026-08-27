@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>DeepSeek Harness Desktop</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { display: grid; place-items: center; min-height: 100vh; margin: 0; }
+      main { max-width: 44rem; padding: 2rem; }
+      h1 { font-size: 1.25rem; }
+      code { display: block; white-space: pre-wrap; word-break: break-word;
+             padding: 1rem; border-radius: 0.5rem; background: color-mix(in srgb, currentColor 8%, transparent); }
+      button { margin-top: 1rem; margin-right: 0.5rem; padding: 0.5rem 1rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>The agent runtime could not be started</h1>
+      <p>DeepSeek Harness Desktop could not reach its local runtime (sidecar). The diagnostic below may help:</p>
+      <code>[<span id="dsh-diagnostic-code">DSH_DIAGNOSTIC_CODE</span>] DSH_DIAGNOSTIC_TEXT</code>
+      <button type="button" id="dsh-open-logs">Open log directory</button>
+      <button type="button" onclick="location.reload()">Retry</button>
+    </main>
+    <script>
+      document.getElementById('dsh-open-logs').addEventListener('click', () => {
+        window.dshDesktop.openLogsDir()
+      })
+    </script>
+  </body>
+</html>

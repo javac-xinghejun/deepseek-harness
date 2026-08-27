@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // The Electron shell is not a workspace library: this program emits the
+    // runnable ESM entry the packaged app loads (bin dsh-desktop), not the
+    // repo-wide lib/types face, so composite/declaration machinery is off.
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "outDir": "lib"
+  },
+  "include": [
+    "src/main/**/*.ts"
+  ]
+}
