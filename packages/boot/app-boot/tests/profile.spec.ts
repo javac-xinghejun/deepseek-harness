@@ -161,6 +161,18 @@ describe('loadProfile', () => {
       .toEqual([...PROFILE_TEMPLATES.web ?? []])
   })
 
+  it('initializes the desktop profile from the shipped three-bundle tuple', () => {
+    expect(PROFILE_TEMPLATES.desktop).toEqual([
+      '@deepseek-ai/dsh-base',
+      '@deepseek-ai/dsh-web-app',
+      '@deepseek-ai/dsh-desktop-app',
+    ])
+    // The shipped desktop template keeps unnamed profiles on the
+    // single-base fail-loud path rather than leaking the three-layer stack.
+    expect(() => loadProfile('t', 'custom', stageInstallation({}), tmp()))
+      .toThrow('profile "custom" does not exist')
+  })
+
   it('normalizes only the exact installation-owned headless bundle tuple', () => {
     const anchor = stageInstallation({
       '@deepseek-ai/dsh-base': { patch: '[]\n' },
