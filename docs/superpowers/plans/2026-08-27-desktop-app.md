@@ -1,50 +1,52 @@
-# DeepSeek Harness Desktop 一期实施计划
+# DeepSeek Harness Desktop phase-one implementation plan
+
+English | [中文](2026-08-27-desktop-app.zh.md)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把现有 Web GUI 打包为三平台可安装、可自更新的 DeepSeek Harness Desktop（一期 sidecar 子进程形态）。
+**Goal:** Package the existing Web GUI into DeepSeek Harness Desktop — installable and self-updating on all three platforms (phase one, sidecar subprocess form).
 
-**Architecture:** Electron 壳（`apps/desktop`）spawn 一个 @yao-pkg/pkg 打出的单文件 sidecar exe（内嵌 `--profile desktop` 组合 = dsh-base + dsh-web-app + dsh-desktop-app），renderer 加载 `http://127.0.0.1:<动态端口>`，交互链路与浏览器版完全同一条；desktop bundle 一期仅禁用浏览器弹出并作为二期 IPC carrier 的席位。更新走 electron-updater → GitHub Releases。
+**Architecture:** The Electron shell (`apps/desktop`) spawns a single-file sidecar exe packed by @yao-pkg/pkg carrying the `--profile desktop` composition (= dsh-base + dsh-web-app + dsh-desktop-app); the renderer loads `http://127.0.0.1:<dynamic port>` on a path byte-identical to the browser edition; the desktop bundle only disables the browser handoff in phase one and serves as the phase-two IPC-carrier seat. Updates flow through electron-updater → GitHub Releases.
 
-**Tech Stack:** TypeScript (ESM)、Electron + electron-builder + electron-updater、@yao-pkg/pkg (SEA 单文件)、vitest、Cordis 插件体系（不改 agent-loop）。
+**Tech Stack:** TypeScript (ESM), Electron + electron-builder + electron-updater, @yao-pkg/pkg (SEA single file), vitest, Cordis plugin system (no agent-loop changes).
 
-**Spec:** `docs/superpowers/specs/2026-08-27-desktop-app-design.md`（本计划从中立论；执行者需同时阅读两份文档）
+**Spec:** `docs/superpowers/specs/2026-08-27-desktop-app-design.md` (this plan argues from it; implementers read both documents)
 
 ## Global Constraints
 
-以下约束适用于每一个任务：
+The following constraints apply to every task:
 
-- 全仓 ESM（`"type": "module"`）；package 间导入一律用包名，本地相对导入用 `.ts` 后缀。
-- 仓库版本序列当前为 `0.1.0-rc.8`；所有新增 workspace 包版本必须设为 `0.1.0-rc.8` 并跟 dsh 发布家族一起升。
-- `apps/*` 与 `packages/<group>/<pkg>` 都被 `scripts/release/families.ts` 的 dsh 家族 patterns 自动收编：**任何新包不得带 `"private": true`**，否则 `release:verify` 失败。
-- harness 引擎约束 `node ^22.19 || >=24`：sidecar（pkg node24 基线）天然满足；Electron 内置 Node ≥22.19 是二期 carrier 化的前置项（本期只记录，不验证）。
-- vitest 根配置已收录 `apps/*/tests/**/*.spec.ts` 与 `packages/*/*/tests/**/*.spec.{ts,tsx}`；测试放各包 `tests/`，命名 `*.spec.ts`（client 面 `*.client.spec.{ts,tsx}`），不要新建各包自有 vitest 依赖（根 devDeps 已有 vitest ^4.1.8）。
-- coverage 100% 门只扫 `packages/*/*/src/**`：`packages/bundle/desktop-app` 必须满覆盖；`apps/desktop/src` 不在门内但仍受 typecheck/lint 管。
-- `scripts/**` 被 jscpd duplication 门扫描（`.jscpd.json`）：从 `build-exe-for-python-sdk.ts` 提取共享模块后再写新打包脚本，禁止复制粘贴实现。
-- 每个包必须拥有自己的 `./invariant` 导出并在 manifest 注册（见 `packages/CLAUDE.md`）。
-- 功能插件导出形态二选一且不可混用：function 插件 named-export `name`/`inject`/`apply`，无 default export；Service 类 default-export。
-- 生命周期/子进程/teardown 代码遵守 `docs/defensive-patterns.md`：结果的正交事实独立上报（`exitCode`/`signal`/`timedOut` 各自独立字段）、dispose 达到静默（kill → await 退出，且先解绑监听再 kill）、dispatcher 内 try/catch 包住用户回调异常。
-- **env scrub 反向决策（有意为之，勿"修复"）**：壳 spawn sidecar 时继承完整用户 env，不做 `*KEY*/*SECRET*` 清洗——credentials 的最高优先级来源就是 inherited env（`$HOME/.dsh/.credentials.yaml` 同级机制的第一层），清洗会破坏用户显式导出 `DEEPSEEK_API_KEY` 的配置途径。defensive-patterns 的 scrub 规则针对的是 harness 向下派生用户命令的场景，方向相反。
-- prose 遵守一物理行一段落；文件结尾恰一个换行符（pre-commit whitespace 门会查）。
-- fixture/keyless 回放必须在 macOS/Linux 上成立；不许用 normalizer 掩盖平台差异。
+- Whole-repo ESM (`"type": "module"`); inter-package imports always use package names, local relative imports use the `.ts` suffix.
+- The repository version series is currently `0.1.0-rc.8`; every new workspace package version must be set to `0.1.0-rc.8` and rise with the dsh release family.
+- `apps/*` and `packages/<group>/<pkg>` are auto-collected by the dsh family patterns in `scripts/release/families.ts`: **no new package may carry `"private": true`**, otherwise `release:verify` fails.
+- Harness engines constrain `node ^22.19 || >=24`: the sidecar (pkg node24 baseline) satisfies them naturally; Electron bundled Node ≥22.19 is a prerequisite of the phase-two carrier move (recorded this phase, not verified).
+- The root vitest config already includes `apps/*/tests/**/*.spec.ts` and `packages/*/*/tests/**/*.spec.{ts,tsx}`; tests live in each package `tests/`, named `*.spec.ts` (client-face `*.client.spec.{ts,tsx}`); do not add per-package vitest dependencies (root devDependencies already carry vitest ^4.1.8).
+- The coverage 100% gate scans only `packages/*/*/src/**`: `packages/bundle/desktop-app` must be fully covered; `apps/desktop/src` sits outside the gate but remains under typecheck/lint.
+- `scripts/**` is scanned by the jscpd duplication gate (`.jscpd.json`): extract the shared module from `build-exe-for-python-sdk.ts` before writing the new packaging script; copy-paste implementations are forbidden.
+- Every package must own its `./invariant` export and register it in the manifest (see `packages/CLAUDE.md`).
+- Function-plugin export forms are either/or and never mixed: function plugins named-export `name`/`inject`/`apply` with no default export; Service classes default-export.
+- Lifecycle/subprocess/teardown code follows `docs/defensive-patterns.md`: orthogonal outcome facts reported independently (`exitCode`/`signal`/`timedOut` each their own field), disposal reaches quiescence (kill → await exit, unbinding listeners before killing), dispatcher try/catch contains user-callback exceptions.
+- **Env-scrub reversal decision (deliberate — do not "fix")**: when spawning the sidecar the shell inherits the full user env without `*KEY*/*SECRET*` scrubbing — inherited env is the highest-priority credentials source (the first layer alongside `$HOME/.dsh/.credentials.yaml`), and scrubbing would break explicitly exported `DEEPSEEK_API_KEY` configuration. The defensive-patterns scrub rule targets harness deriving user commands downward — the opposite direction.
+- Prose keeps one physical line per paragraph; files end with exactly one trailing newline (the pre-commit whitespace gate checks).
+- Fixture/keyless replay must hold on macOS/Linux; normalizers must not paper over platform differences.
 
 ---
 
-## Phase 0 — Spike：pkg Windows 闭合可行性（R1 最先消解）
+## Phase 0 — Spike: pkg Windows closure feasibility (resolving R1 first)
 
-### Task 0.1: Spike — @yao-pkg/pkg 打 win-x64 全量 closure
+### Task 0.1: Spike — @yao-pkg/pkg packing the win-x64 full closure
 
 **Files:**
-- Create: `.github/workflows/desktop-spike.yml`（spike 专用，结论落定后删除）
-- Read first: `scripts/build-exe-for-python-sdk.ts`（全部）、`docs/testing.md`
+- Create: `.github/workflows/desktop-spike.yml` (spike-only, deleted once the conclusion lands)
+- Read first: `scripts/build-exe-for-python-sdk.ts` (entirely), `docs/testing.md`
 
 **Interfaces:**
-- Consumes: 现有 python sdk 打包链路（作 staging 流程模板）
-- Produces: go/no-go 结论（写入本计划的执行附注与最终 Agent Note）；spike 用 workflow 为临时产物，正式管线由 Task 5.x 重写
+- Consumes: the existing python-sdk packaging pipeline (as the staging-flow template)
+- Produces: a go/no-go conclusion (written into this plan’s execution annex and the final Agent Note); the spike workflow is a temporary artifact — Task 5.x rewrites the real pipeline
 
-**为什么是 spike 而不是正式任务**：python 脚本的 `PLATFORMS = ['linux','macos']` 显式排除 Windows 是既定 non-goal；我们把 win-x64 变成目标，最大未知是 koffi（Windows ACL 后端的 N-API native 模块）等 native 依赖能否进入 SEA 闭合并被正确加载。此答案决定后续所有打包任务的形态，必须最先消解。
+**Why a spike rather than a formal task**: the python script’s `PLATFORMS = ['linux','macos']` exclusion of Windows is an established non-goal; making win-x64 a target makes native dependencies — koffi (the N-API module behind the Windows ACL backend) chief among them — entering the SEA closure and loading correctly the largest unknown. That answer decides the form of every later packaging task and must resolve first.
 
-- [ ] **Step 1: 写 spike workflow**
+- [ ] **Step 1: write the spike workflow**
 
 ```yaml
 # .github/workflows/desktop-spike.yml
@@ -74,20 +76,20 @@ jobs:
           Get-ChildItem -Recurse staging目录 -Filter *.node | Select-Object FullName
 ```
 
-注：`--dry-run` 分支若在 python 脚本中不存在 staging 输出物化，则临时改为手跑 `pnpm deploy` 段（Step 1 的目的只是拿到「closure 能否收集成功 + 体积 + *.node 清单」，允许 spike 脚本粗糙）。
+Note: if the python script has no materialized staging output behind `--dry-run`, temporarily hand-run its `pnpm deploy` section instead (Step 1 only needs “closure collected? + size + *.node inventory”; spike-grade scripts are acceptable).
 
-- [ ] **Step 2: 触发运行并记录三项事实**
+- [ ] **Step 2: trigger the run and record three facts**
 
 Run: `gh workflow run desktop-spike && gh run watch`
-Expected 记录：① staging 成功率（pnpm deploy 是否报错）；② `*.node` 文件清单是否含 koffi 的预编译产物；③ uncompressed 总体积数字。
+Expected records: ① staging success rate (does pnpm deploy error); ② whether the `*.node` inventory includes koffi prebuilds; ③ the uncompressed total size figure.
 
-- [ ] **Step 3: 本机装载冒烟（可选但强烈建议）**
+- [ ] **Step 3: local launch smoke (optional but strongly advised)**
 
-在有 Windows 环境可用时：把 exe 拉起 → TCP 探测就绪 → 杀进程。无 Windows 时在 issue 正文记录此欠账，由 DoD 阶段（Task 7.1）补验。
+Wherever a Windows environment is available: bring up the exe → TCP probe ready → kill the process. Without Windows, record the debt in an issue body; DoD (Task 7.1) closes it.
 
-- [ ] **Step 4: 记录结论并删除 spike workflow**
+- [ ] **Step 4: record the conclusion and delete the spike workflow**
 
-结论以一句话形式追加到 Agent Note（Task 7.2 创建）：例如「Spike 2026-08-xx: win-x64 SEA closure OK/NOK，koffi 加载 OK/NOK，uncompressed 体积 N MB」。然后 `git rm .github/workflows/desktop-spike.yml`。
+Append the conclusion as one sentence to the Agent Note (created in Task 7.2), e.g. “Spike 2026-08-xx: win-x64 SEA closure OK/NOK, koffi load OK/NOK, uncompressed size N MB”. Then `git rm .github/workflows/desktop-spike.yml`.
 
 - [ ] **Step 5: Commit**
 
@@ -102,23 +104,23 @@ git commit --allow-empty -m "docs(desktop): record spike conclusion"
 
 ## Phase 1 — desktop bundle
 
-### Task 1.1: 创建 `packages/bundle/desktop-app` 包骨架
+### Task 1.1: create the `packages/bundle/desktop-app` package skeleton
 
 **Files:**
 - Create: `packages/bundle/desktop-app/package.json`
 - Create: `packages/bundle/desktop-app/tsconfig.json`
 - Create: `packages/bundle/desktop-app/src/index.ts`
 - Create: `packages/bundle/desktop-app/src/invariant.ts`
-- Create: `packages/bundle/desktop-app/cordis.patch.yml`（本任务先放占位数组 `[]`，Task 1.2 填真身）
-- Create: `packages/bundle/desktop-app/README.md`、`README.zh.md`、`README.i18n.yaml`
-- Create: `packages/bundle/desktop-app/tests/desktop-app.spec.ts`（Task 1.3 填实）
-- Modify: `tsconfig.json`（根 solution 不动——聚合面由 `tsconfig.host.json` seed）
+- Create: `packages/bundle/desktop-app/cordis.patch.yml` (placeholder array `[]` this task; Task 1.2 fills the real rows)
+- Create: `packages/bundle/desktop-app/README.md`, `README.zh.md`, `README.i18n.yaml`
+- Create: `packages/bundle/desktop-app/tests/desktop-app.spec.ts` (filled in Task 1.3)
+- Modify: `tsconfig.json` (root solution untouched — aggregates are seeded by `tsconfig.host.json`)
 
 **Interfaces:**
-- Consumes: `packages/bundle/headless/package.json` 的逐字段形态（对照抄写）；`packages/bundle/headless/tsconfig.json` extends 关系
-- Produces: 包名 `@deepseek-ai/dsh-desktop-app`，export 面 `.` / `./invariant` / `./startup`（暂缺）/ `./cordis.patch.yml`；`dsh.bundle.patch` 字段指向 `./cordis.patch.yml`
+- Consumes: the field-by-field shape of `packages/bundle/headless/package.json` (copy against it); the extends relation of `packages/bundle/headless/tsconfig.json`
+- Produces: package name `@deepseek-ai/dsh-desktop-app`; export face `.` / `./invariant` / `./startup` (absent for now) / `./cordis.patch.yml`; the `dsh.bundle.patch` field points at `./cordis.patch.yml`
 
-- [ ] **Step 1: 写 package.json（对照 headless 逐字段复刻，dependencies 只留 cordis peer）**
+- [ ] **Step 1: write package.json (replicate headless field by field; dependencies keep only the cordis peer)**
 
 ```json
 {
@@ -145,9 +147,9 @@ git commit --allow-empty -m "docs(desktop): record spike conclusion"
 }
 ```
 
-（对齐点：`peerDependencies` 的 cordis 版本号以 `packages/bundle/headless/package.json` 实际值为准抄写。）
+(Alignment point: copy the actual cordis version number in `peerDependencies` from `packages/bundle/headless/package.json`.)
 
-- [ ] **Step 2: 写 src/index.ts 与 src/invariant.ts**
+- [ ] **Step 2: write src/index.ts and src/invariant.ts**
 
 ```ts
 // src/index.ts
@@ -182,16 +184,16 @@ export function apply(_ctx: import('@deepseek-ai/cordis').Context): void {}
 export function installInvariants(): void {}
 ```
 
-invariant 文件的准确签名（installer 形状、manifest 注册方式）以任一现有 bundle（如 `packages/bundle/web-app/src/invariant.ts`）为准抄写结构——上面只示意文案义务；如果 manifest 还需在某处注册名字，跟随同一现行模式。
+Copy the invariant file’s exact signature (installer shape, manifest registration) structurally from any existing bundle (e.g. `packages/bundle/web-app/src/invariant.ts`) — the snippet above only sketches the wording duty; wherever the manifest still needs a name registered, follow that same current pattern.
 
-- [ ] **Step 3: tsconfig.json 与 README**
+- [ ] **Step 3: tsconfig.json and READMEs**
 
-`tsconfig.json`：extends `../../tsconfig.base.json`，`rootDir: "src"`、`outDir: "lib/types"`、`include: ["src"]`，references 数组含 `../base`、`../web-app`（形态照抄 headless 的 tsconfig）。README 按 Model Experience 格式写模型/token/KV 影响（本 bundle 无模型面影响，明说 no model-facing rows），并加 `## Known Limitations and Deferred Work`（二期 carrier 方向一句）；README.zh.md 对应翻译，README.i18n.yaml 登记。
+`tsconfig.json`: extends `../../tsconfig.base.json`, `rootDir: "src"`, `outDir: "lib/types"`, `include: ["src"]`, with a references array containing `../base` and `../web-app` (shape copied from the headless tsconfig). Write the README in the Model Experience format covering model/token/KV effects (this bundle has none — say no model-facing rows outright) plus `## Known Limitations and Deferred Work` (one sentence on the phase-two carrier direction); translate README.zh.md correspondingly and register README.i18n.yaml.
 
-- [ ] **Step 4: 构建 + hygiene 自检**
+- [ ] **Step 4: build + hygiene self-check**
 
 Run: `pnpm install && pnpm run build:lib && pnpm run constraints`
-Expected: PASS（constraints 校验 workspace 结构合法性）。
+Expected: PASS (constraints validates workspace structure legality).
 
 - [ ] **Step 5: Commit**
 
@@ -200,16 +202,16 @@ git add packages/bundle/desktop-app
 git commit -m "feat(desktop): add dsh-desktop-app bundle skeleton"
 ```
 
-### Task 1.2: cordis.patch.yml — 禁用浏览器 handoff
+### Task 1.2: cordis.patch.yml — disable the browser handoff
 
 **Files:**
 - Modify: `packages/bundle/desktop-app/cordis.patch.yml`
 
 **Interfaces:**
-- Consumes: `packages/bundle/web-app/cordis.patch.yml` L137-144 的 `web-runtime` 行原文
-- Produces: desktop 组合下 `openBrowser === false` 的组合语义（Task 1.3 断言对象）
+- Consumes: the `web-runtime` row text at `packages/bundle/web-app/cordis.patch.yml` L137-144
+- Produces: composed semantics where `openBrowser === false` under the desktop composition (the Task 1.3 assertion target)
 
-- [ ] **Step 1: 写 patch（patch 替换整行 config，必须复述全部 owned keys）**
+- [ ] **Step 1: write the patch (a patch replaces the row’s whole config — restate every owned key)**
 
 ```yaml
 # Stacks strictly after @deepseek-ai/dsh-web-app: desktop shells own the window,
@@ -223,7 +225,7 @@ git commit -m "feat(desktop): add dsh-desktop-app bundle skeleton"
     trustedHosts: !!js ctx.webStartup.trustedHosts
 ```
 
-注意两个严格事项：① 注释里的事实（“替换整行”）来自 web-app patch 头部 L5-6 的原注释，不得遗漏 keys——`printUrl`/`surfaceContext` 保持原值，`trustedHosts` 保持原 `!!js` 表达式；② 如果 `ctx.webStartup.trustedHosts` 表达式在该 patch 语境不可达（同一 overlay scope），跟随 web-app 原文件的写法一字不改地搬运表达式，若搬运后发现 Loader 报错，回读 `docs/cordis-primer.md#loader-configuration` 并以 primer 允许的最小修正落地，同时在 PR 说明。
+Two strict notes: ① the commented fact (“replaces the whole config”) comes from the original comment at the top of the web-app patch, so no keys may go missing — `printUrl`/`surfaceContext` keep their values and `trustedHosts` keeps its `!!js` expression; ② if the `ctx.webStartup.trustedHosts` expression is unreachable in this patch context (same overlay scope), lift the expression verbatim following the web-app original, and should the Loader then error, consult `docs/cordis-primer.md#loader-configuration` and land the smallest primer-sanctioned correction, explaining in the PR.
 
 - [ ] **Step 2: Commit**
 
@@ -232,17 +234,17 @@ git add packages/bundle/desktop-app/cordis.patch.yml
 git commit -m "feat(desktop): disable browser handoff in desktop composition"
 ```
 
-### Task 1.3: REAL-composition 测试 — 组合后 openBrowser 为 false
+### Task 1.3: REAL-composition test — composed openBrowser is false
 
 **Files:**
 - Test: `packages/bundle/desktop-app/tests/desktop-app.spec.ts`
-- Read first: `packages/bundle/web-app/tests/browser-open.spec.ts`（断言手法母版）、`docs/testing.md`（REAL composition 政策）
+- Read first: `packages/bundle/web-app/tests/browser-open.spec.ts` (assertion master template), `docs/testing.md` (REAL composition policy)
 
 **Interfaces:**
-- Consumes: Task 1.2 的 patch；web-app bundle 的 patch 行为
-- Produces: 该文件同时充当 desktop 组合的回归锚点；二期加 carrier 行时在此追加断言
+- Consumes: the Task 1.2 patch; the web-app bundle patch behavior
+- Produces: this file doubles as the regression anchor of the desktop composition; append assertions here when phase two adds carrier rows
 
-- [ ] **Step 1: 写失败测试**
+- [ ] **Step 1: write the failing test**
 
 ```ts
 import { describe, expect, it } from 'vitest'
@@ -262,24 +264,24 @@ describe('desktop bundle composition', () => {
 })
 ```
 
-具体装配形式必须以 browser-open.spec.ts 实际使用的 Loader/boot 辅助为准（它是唯一权威样板）；禁止 hand-built `ctx.plugin(...)` 替代真实 Loader 组合（`packages/CLAUDE.md` REAL-composition 政策）。
+The concrete assembly must follow the Loader/boot helpers browser-open.spec.ts actually uses (it is the sole authoritative template); hand-built `ctx.plugin(...)` substitutes for real Loader composition are forbidden (`packages/CLAUDE.md` REAL-composition policy).
 
-- [ ] **Step 2: 跑红**
+- [ ] **Step 2: run red**
 
 Run: `pnpm vitest run packages/bundle/desktop-app --project thread-safe`
-Expected: FAIL（openBrowser 还是 true，或组合还叠不上 desktop patch）。
+Expected: FAIL (openBrowser still true, or the composition cannot stack the desktop patch yet).
 
-- [ ] **Step 3: 若跑红原因是 patch 未生效，修 patch 至绿**
+- [ ] **Step 3: if red because the patch did not take effect, fix the patch to green**
 
-常见原因：bundle 名拼写与 `dsh.bundle.patch` 路径不符；patch 文件顶层不是数组；`!!js` 缺双叹号。
+Common causes: bundle name spelling mismatching the `dsh.bundle.patch` path; patch file top level not an array; missing double bang on `!!js`.
 
 Run: `pnpm vitest run packages/bundle/desktop-app --project thread-safe`
 Expected: PASS。
 
-- [ ] **Step 4: 覆盖率自检（该包 src 在 100% 门内）**
+- [ ] **Step 4: coverage self-check (this package’s src is inside the 100% gate)**
 
 Run: `pnpm vitest run packages/bundle/desktop-app --coverage --project thread-safe`
-Expected: desktop-app 两文件 100%。
+Expected: both desktop-app files at 100%.
 
 - [ ] **Step 5: Commit**
 
@@ -290,20 +292,20 @@ git commit -m "test(desktop): assert composed openBrowser is disabled"
 
 ---
 
-## Phase 2 — profile 模板接线
+## Phase 2 — profile template wiring
 
-### Task 2.1: `PROFILE_TEMPLATES` 增加 desktop 模板
+### Task 2.1: add the desktop entry to `PROFILE_TEMPLATES`
 
 **Files:**
 - Modify: `packages/boot/app-boot/src/profile.ts:113-117`
-- Test: `packages/boot/app-boot/tests/` 下管理 PROFILE_TEMPLATES 的现有 spec（`ls packages/boot/app-boot/tests/` 定位，断言风格照旧）
-- Modify: `packages/boot/app-boot/README.md` 中列模板的小节（如有）
+- Test: the existing spec managing PROFILE_TEMPLATES under `packages/boot/app-boot/tests/` (locate via `ls packages/boot/app-boot/tests/`; keep the assertion style)
+- Modify: the template-listing section of `packages/boot/app-boot/README.md` (if present)
 
 **Interfaces:**
-- Consumes: Task 1.1 的 `@deepseek-ai/dsh-desktop-app`
-- Produces: `dsh --profile desktop` 首次使用时自动初始化 `[dsh-base, dsh-web-app, dsh-desktop-app]` 组合——sidecar 与开发模式的统一入口
+- Consumes: the Task 1.1 `@deepseek-ai/dsh-desktop-app`
+- Produces: first use of `dsh --profile desktop` auto-initializes the `[dsh-base, dsh-web-app, dsh-desktop-app]` composition — one shared entry for sidecar and development modes
 
-- [ ] **Step 1: 写失败测试（挂在管理模板的现有 spec 里）**
+- [ ] **Step 1: write the failing test (inside the existing template-managing spec)**
 
 ```ts
 it('initializes the desktop profile from the shipped three-bundle tuple', () => {
@@ -315,14 +317,14 @@ it('initializes the desktop profile from the shipped three-bundle tuple', () => 
 })
 ```
 
-另断言未名列出的名字仍走 `DEFAULT_PROFILE_BUNDLES`（防回归，如已有同类断言则跳过）。
+Also assert names absent from the table still fall through to `DEFAULT_PROFILE_BUNDLES` (regression guard; skip if an equivalent assertion already exists).
 
-- [ ] **Step 2: 跑红**
+- [ ] **Step 2: run red**
 
 Run: `pnpm vitest run packages/boot/app-boot --project thread-safe`
-Expected: FAIL（desktop 键不存在）。
+Expected: FAIL (no desktop key yet).
 
-- [ ] **Step 3: 最小实现**
+- [ ] **Step 3: minimal implementation**
 
 ```ts
 export const PROFILE_TEMPLATES: Record<string, readonly string[]> = {
@@ -332,10 +334,10 @@ export const PROFILE_TEMPLATES: Record<string, readonly string[]> = {
 }
 ```
 
-- [ ] **Step 4: 跑绿 + 端到端手动验证（此时 dev 链路已通！）**
+- [ ] **Step 4: run green + manual end-to-end verification (the dev chain works from here!)**
 
 Run: `pnpm vitest run packages/boot/app-boot --project thread-safe && pnpm dsh --profile desktop --dump-config | grep -A3 web-runtime`
-Expected: 测试 PASS；dump 里 web-runtime 行 `openBrowser: false`。
+Expected: tests PASS; the dump shows the web-runtime row `openBrowser: false`.
 
 - [ ] **Step 5: Commit**
 
@@ -344,23 +346,23 @@ git add packages/boot/app-boot
 git commit -m "feat(desktop): ship desktop profile template (base+web-app+desktop-app)"
 ```
 
-### Task 3.0（并入本阶段）: 验证既有首启引导在桌面组合下生效
+### Task 3.0 (folded into this phase): verify existing first-run onboarding works under the desktop composition
 
-**背景更正（相对 spec）**：探索证实 onboarding 能力已存在于 `packages/client/ui-settings-models`（`OnboardingReadiness` closed union、`onboardingReadiness()`、`DeepSeekOnboardingDialog.tsx` 挂在 `settings.onboarding` slot），且 credentials 特权 RPC 钉在 loopback——桌面侧满足。**不新建 ui-onboarding 包**（YAGNI）；spec 组件表第 4 项按此更正。
+**Background correction (versus the spec)**: exploration confirmed the onboarding capability already exists in `packages/client/ui-settings-models` (the `OnboardingReadiness` closed union, `onboardingReadiness()`, and `DeepSeekOnboardingDialog.tsx` mounted at the `settings.onboarding` slot), and credentials privileged RPCs pin to loopback — the desktop side qualifies. **Do not create a new ui-onboarding package** (YAGNI); spec component-table item 4 stands corrected accordingly.
 
-**Files:**（零新增，纯验证 + 可能的一行 roster 修正）
-- Verify: web-app 浏览器 roster 是否已含 `ui-settings-models`（grep `packages/bundle/web-app/cordis.patch.yml` 与 client-shell 装配处）
+**Files:** (zero additions; pure verification plus possibly a one-line roster fix)
+- Verify: whether the web-app browser roster already carries `ui-settings-models` (grep `packages/bundle/web-app/cordis.patch.yml` and the client-shell assembly sites)
 
-- [ ] **Step 1: 静态验证**
+- [ ] **Step 1: static verification**
 
 Run: `grep -rn "ui-settings-models" packages/bundle/web-app packages/client/web`
-Expected: 命中装配处。若无命中：在 roster/装配清单补一行挂载（照邻居插件的登记格式），随本步提交。
+Expected: assembly-site hits. If none: add one roster/assembly mounting line following the neighboring plugin registration format, committed with this step.
 
-- [ ] **Step 2: 动态验证（manual，证据入 PR）**
+- [ ] **Step 2: dynamic verification (manual; evidence into the PR)**
 
-清空 `~/.dsh/.credentials.yaml` 后 `pnpm dsh web --no-open`，浏览器打开 → 应弹 onboarding modal 且填入假 key 后 `credentials.describe` 返回 configured:true。截图/录屏贴 PR。
+Clear `~/.dsh/.credentials.yaml`, then `pnpm dsh web --no-open`; opening the browser should surface the onboarding modal, and after entering a dummy key `credentials.describe` returns configured:true. Attach screenshots/screen capture to the PR.
 
-- [ ] **Step 3: Commit（仅在 Step 1 需要修正时）**
+- [ ] **Step 3: Commit (only when Step 1 needed a fix)**
 
 ```bash
 git commit -m "fix(desktop): mount ui-settings-models into browser roster for onboarding"
@@ -368,29 +370,29 @@ git commit -m "fix(desktop): mount ui-settings-models into browser roster for on
 
 ---
 
-## Phase 4 — Electron 壳工程 `apps/desktop`
+## Phase 4 — the Electron shell project `apps/desktop`
 
-### Task 4.1: 工程骨架 + main/preload/renderer 通道
+### Task 4.1: project skeleton + main/preload/renderer channels
 
 **Files:**
 - Create: `apps/desktop/package.json`
 - Create: `apps/desktop/tsconfig.json`
-- Create: `apps/desktop/src/main/main.ts`（入口）
+- Create: `apps/desktop/src/main/main.ts` (entry point)
 - Create: `apps/desktop/src/main/window-manager.ts`
 - Create: `apps/desktop/src/preload/index.ts`
-- Create: `apps/desktop/src/renderer/error.html`（sidecar 失败错误页，静态自包含）
-- Create: `apps/desktop/tests/bootstrap.spec.ts`（冒烟 level 单测：模块可 import、常量合法）
+- Create: `apps/desktop/src/renderer/error.html` (sidecar-failure error page, statically self-contained)
+- Create: `apps/desktop/tests/bootstrap.spec.ts` (smoke-level unit test: modules importable, constants legal)
 
 **Interfaces:**
-- Consumes: Task 4.2 之后才有 SidecarManager；本任务先把 import 点留作明确编译依赖（ESM 顶层静态 import，不可字符串动态拼）
-- Produces: `createMainWindow(opts)` 的窗口生命周期、`MAIN_PROCESS_API` 名称（preload 暴露面，Task 4.3/4.4 消费）
+- Consumes: SidecarManager arrives only after Task 4.2; this task leaves the import site as an explicit compile-time dependency (top-level static ESM import, never string-assembled dynamic imports)
+- Produces: the `createMainWindow(opts)` window lifecycle and the `MAIN_PROCESS_API` names (the preload exposure consumed by Tasks 4.3/4.4)
 
-关键决策（在此钉死，实施者不再自行选择）：
-- 包名 `@deepseek-ai/dsh-desktop`，`version` 同 rc 序列，**无 private 字段**，`bin: { "dsh-desktop": "lib/main.js" }`（即使本期不上 npm 分发应用本体，release 家族成员身份要求公共语义）。
-- 构建：**不走根 tsdown workspace**（`apps/web` 先例）；main/preload 用 tsc 直出 `lib/`，renderer 只是静态 html/css。`tsconfig.json` extends `../../tsconfig.base.json`、rootDir src、outDir lib/types、include src。
-- devDependencies 增加 `electron`（版本要求写死规则：安装当期 stable 主线，且其内置 Node ≥22.19——`pnpm why electron` 后在 node 上 `process.versions.node` 断言，不达标就升主线）、`electron-builder`、`electron-updater`。
+Key decisions (pinned here; implementers stop choosing):
+- Package name `@deepseek-ai/dsh-desktop`, `version` on the same rc series, **no private field**, `bin: { "dsh-desktop": "lib/main.js" }` (even though this phase does not distribute the app itself on npm, release-family membership demands public semantics).
+- Build: **not through the root tsdown workspace** (`apps/web` precedent); main/preload compile straight to `lib/` via tsc, renderer is static html/css. `tsconfig.json` extends `../../tsconfig.base.json`, rootDir src, outDir lib/types, include src.
+- devDependencies gain `electron` (version rule pinned: install the current stable line whose bundled Node ≥22.19 — check `pnpm why electron` then assert `process.versions.node` on node; bump the line when short), plus `electron-builder` and `electron-updater`.
 
-- [ ] **Step 1: 写三个入口的骨架代码**
+- [ ] **Step 1: write the three entry skeletons**
 
 ```ts
 // src/main/main.ts
@@ -439,7 +441,7 @@ async function shutdown(code: number): Promise<void> {
 // 暴露的方法仅限白名单常量，不接受任意 channel。
 ```
 
-error.html 内容：标题、`diagnostic` 占位段落、「打开日志目录」按钮（调 preload 桥）、重启按钮（location.reload）。诊断文案入此处而非硬编码在 main。
+error.html contents: a title, the `diagnostic` placeholder paragraph, the “open log directory” button (calling the preload bridge), and a retry button (location.reload). Diagnostic copy lives here, not hardcoded in main.
 
 - [ ] **Step 2: bootstrap.spec.ts**
 
@@ -458,12 +460,12 @@ describe('desktop shell bootstrap', () => {
 })
 ```
 
-（api-names.ts 存放 MAIN_PROCESS_API 与 SECURITY_FLAGS 常量——main 与 preload 共享，避免字符串漂移。）
+(api-names.ts holds the MAIN_PROCESS_API and SECURITY_FLAGS constants shared by main and preload so strings cannot drift.)
 
-- [ ] **Step 3: typecheck 过闸**
+- [ ] **Step 3: pass typecheck**
 
 Run: `pnpm exec tsc -p apps/desktop --noEmit`
-Expected: PASS。注意 Electron 类型从 `electron` 包读取，tsconfig types 不要全局引入 node-dom 冲突（以 apps/web 的 exclude 手法隔离测试文件）。
+Expected: PASS. Note Electron types come from the `electron` package; do not let tsconfig types introduce global node-dom conflicts (use apps/web’s exclude technique to fence off test files).
 
 - [ ] **Step 4: Commit**
 
@@ -472,17 +474,17 @@ git add apps/desktop
 git commit -m "feat(desktop): scaffold electron shell with thin preload bridge"
 ```
 
-### Task 4.2: SidecarManager（本计划 TDD 核心）
+### Task 4.2: SidecarManager (this plan’s TDD core)
 
 **Files:**
 - Create: `apps/desktop/src/main/sidecar-manager.ts`
-- Create: `apps/desktop/src/main/port-probe.ts`（纯函数：空闲端口选择 + TCP probe 循环）
-- Create: `apps/desktop/src/main/restart-policy.ts`（纯函数：指数退避决策）
-- Test: `apps/desktop/tests/sidecar-manager.spec.ts`、`apps/desktop/tests/port-probe.spec.ts`、`apps/desktop/tests/restart-policy.spec.ts`
+- Create: `apps/desktop/src/main/port-probe.ts` (pure functions: free-port selection + TCP probe loop)
+- Create: `apps/desktop/src/main/restart-policy.ts` (pure functions: exponential-backoff decisions)
+- Test: `apps/desktop/tests/sidecar-manager.spec.ts`, `apps/desktop/tests/port-probe.spec.ts`, `apps/desktop/tests/restart-policy.spec.ts`
 
 **Interfaces:**
-- Consumes: 无（独立单元）
-- Produces（main.ts、updater、错误页均依赖此形状）:
+- Consumes: nothing (standalone unit)
+- Produces (main.ts, updater, and the error page all depend on these shapes):
 
 ```ts
 export interface SidecarStartOptions {
@@ -506,7 +508,7 @@ export declare class SidecarManager {
 }
 ```
 
-- [ ] **Step 1: 写失败测试 — 端口与 probe 纯函数**
+- [ ] **Step 1: write failing tests — port/probe pure functions**
 
 ```ts
 // tests/port-probe.spec.ts
@@ -537,12 +539,12 @@ it.each([
 })
 ```
 
-- [ ] **Step 2: 跑红**
+- [ ] **Step 2: run red**
 
 Run: `pnpm vitest run apps/desktop --project thread-safe`
-Expected: FAIL（模块不存在）。
+Expected: FAIL (modules do not exist).
 
-- [ ] **Step 3: 最小实现（三条 defensive-patterns 规则落实到代码形状）**
+- [ ] **Step 3: minimal implementation (three defensive-patterns rules land as code shapes)**
 
 ```ts
 // port-probe.ts 核心
@@ -562,9 +564,9 @@ export function nextBackoffDelayMs(attempt: number): number | null  // 1000<<att
 // · 任何 listener 抛错被 dispatcher try/catch 吞掉并 console.error（callback containment）
 ```
 
-- [ ] **Step 4: 跑绿 + 补状态机用例（列表形式，逐条落成 it()）**
+- [ ] **Step 4: run green + complete the state-machine cases (one it() per list item)**
 
-必备用例清单（每个都要有）：ready before restart attempts exhausted；crash during starting → failed；crash after ready → restarted with new port（window 重新 loadURL 由 onStateChange 消费方负责）；stop 双调用幂等；stop 后 probe 也不通；listener throw 不炸 stop promise。
+Required case list (each mandatory): ready before restart attempts exhausted; crash during starting → failed; crash after ready → restarted with new port (window reloadURL owned by the onStateChange consumer); stop double-call idempotent; post-stop probes fail too; listener throw does not break the stop promise.
 
 Run: `pnpm vitest run apps/desktop --project thread-safe` → PASS。
 
@@ -575,18 +577,18 @@ git add apps/desktop/src apps/desktop/tests
 git commit -m "feat(desktop): sidecar manager with tcp probe and bounded restart"
 ```
 
-### Task 4.3: main 接线 SidecarManager + dev/prod 双启动源
+### Task 4.3: wire SidecarManager into main + dual dev/prod start sources
 
 **Files:**
-- Modify: `apps/desktop/src/main/main.ts`、`window-manager.ts`
+- Modify: `apps/desktop/src/main/main.ts`, `window-manager.ts`
 - Create: `apps/desktop/src/main/resolve-sidecar-command.ts`
 - Test: `apps/desktop/tests/resolve-sidecar-command.spec.ts`
 
 **Interfaces:**
-- Consumes: Task 4.2 的 `SidecarManager`
-- Produces: `resolveSidecarCommand(env): { command: string; args: string[] }` — prod 从 extraResources 取 exe；dev（`DSH_DESKTOP_DEV=1`）返回 `{ command: 'pnpm', args: ['dsh','web','--profile','desktop','--no-open','--port', '<filled later>'] }`
+- Consumes: the Task 4.2 `SidecarManager`
+- Produces: `resolveSidecarCommand(env): { command: string; args: string[] }` — prod takes the exe from extraResources; dev (`DSH_DESKTOP_DEV=1`) returns `{ command: 'pnpm', args: ['dsh','web','--profile','desktop','--no-open','--port', '<filled later>'] }`
 
-- [ ] **Step 1: 失败测试**
+- [ ] **Step 1: failing tests**
 
 ```ts
 it('dev flag selects pnpm dsh web with desktop profile', () => {
@@ -601,12 +603,12 @@ it('prod selects the bundled executable path', () => {
 })
 ```
 
-- [ ] **Step 2: 跑红 → 实现 → 跑绿**（同前节奏；exe 相对路径基于 `app.isPackaged ? process.resourcesPath : repoDist`）
+- [ ] **Step 2: red → implement → green** (same cadence; exe paths rooted at `app.isPackaged ? process.resourcesPath : repoDist`)
 
-- [ ] **Step 3: 手动 dev 冒烟**
+- [ ] **Step 3: manual dev smoke**
 
 Run: `DSH_DESKTOP_DEV=1 pnpm --filter @deepseek-ai/dsh-desktop exec electron lib/main.js`
-Expected: 窗口出现并渲染 desktop 组合 UI；关窗后无残留 node 进程（`pgrep -f "profile desktop"` 空）。
+Expected: window appears rendering the desktop composition UI; after closing, no leftover node processes (`pgrep -f "profile desktop"` empty).
 
 - [ ] **Step 4: Commit**
 
@@ -614,17 +616,17 @@ Expected: 窗口出现并渲染 desktop 组合 UI；关窗后无残留 node 进�
 git commit -am "feat(desktop): wire sidecar lifecycle into main with dev/prod switch"
 ```
 
-### Task 4.4: Updater 封装
+### Task 4.4: updater encapsulation
 
 **Files:**
-- Create: `apps/desktop/src/main/updater.ts`、`apps/desktop/src/main/updater-config.ts`
+- Create: `apps/desktop/src/main/updater.ts`, `apps/desktop/src/main/updater-config.ts`
 - Test: `apps/desktop/tests/updater-config.spec.ts`
 
 **Interfaces:**
-- Consumes: electron-updater `autoUpdater`（粘合层不求单测覆盖）
-- Produces: `readUpdaterConfig(userData): UpdateFeed`（纯函数可测）+ `initUpdater(feed): void`；`UpdateFeed = { provider: 'github'; owner; repo } | { provider: 'generic'; url }`
+- Consumes: electron-updater `autoUpdater` (glue layer, no unit-coverage demand)
+- Produces: `readUpdaterConfig(userData): UpdateFeed` (pure, testable) + `initUpdater(feed): void`; `UpdateFeed = { provider: 'github'; owner; repo } | { provider: 'generic'; url }`
 
-- [ ] **Step 1: 失败测试（决策纯函数）**
+- [ ] **Step 1: failing tests (pure decision function)**
 
 ```ts
 it.each([
@@ -636,9 +638,9 @@ it('generic without url fails loud at startup config validation', () => {
 })
 ```
 
-- [ ] **Step 2: 跑红 → 实现 → 绿**；配置读取顺序：env `DSH_UPDATE_FEED_JSON`（CI 测试用）→ userData/update-feed.json → 默认 GitHub Releases。misconfigured 必须 fail loud（仓库约定），不放静默回退。
+- [ ] **Step 2: red → implement → green**; resolution order: env `DSH_UPDATE_FEED_JSON` (CI testing seam) → userData/update-feed.json → default GitHub Releases. Misconfiguration fails loud (repository rule) — no silent fallback.
 
-- [ ] **Step 3: 粘合层 initUpdater**：`autoUpdater.setFeedURL(...)`、`checkForUpdates()` 幂等轮询（间隔常量 4h，本任务不为间隔暴露配置——YAGNI，升级诉求出现再加）、下载完成 `update-downloaded` 事件经 dialog 提示一键重启安装。channel 常量 `latest`。
+- [ ] **Step 3: glue initUpdater**: `autoUpdater.setFeedURL(...)`, idempotent `checkForUpdates()` polling (interval constant 4h; exposing interval configurability is YAGNI until upgrade demand appears), completed downloads raise `update-downloaded` through a dialog offering one-click restart-install. Channel constant `latest`.
 
 - [ ] **Step 4: Commit**
 
@@ -648,56 +650,56 @@ git commit -m "feat(desktop): configurable update feed with github releases defa
 
 ---
 
-## Phase 5 — sidecar 打包管线 + 安装包装配
+## Phase 5 — sidecar packaging pipeline + installer assembly
 
-### Task 5.1: 提取 exe 打包共享模块（先行于 clone 检测红线）
+### Task 5.1: extract the exe-packaging shared module (before the clone-detection red line)
 
 **Files:**
-- Create: `scripts/exe-packaging/staging.ts`（deploy-staging/materializeStagedLinks/restoreLegacyHoists/injectPkgConfig 的参数化提取）
-- Modify: `scripts/build-exe-for-python-sdk.ts`（改为消费共享模块，行为不变）
-- Test: `scripts/exe-packaging/staging.spec.ts`（从 python 脚本现存 `build-exe-for-python-sdk-native-pty.spec.ts` 中平移可平移用例）
+- Create: `scripts/exe-packaging/staging.ts` (parameterized extraction of deploy-staging/materializeStagedLinks/restoreLegacyHoists/injectPkgConfig)
+- Modify: `scripts/build-exe-for-python-sdk.ts` (consume the shared module, behavior unchanged)
+- Test: `scripts/exe-packaging/staging.spec.ts` (move over the movable cases from the existing `build-exe-for-python-sdk-native-pty.spec.ts`)
 
 **Interfaces:**
-- Produces: `prepareDeployStaging(o: { manifestFilter?: string; extraAssetGlobs?: string[]; entryBin: string; outStageRoot: string }): Promise<void>` 形状的共享 API（Task 5.2 唯一消费入口）
+- Produces: a shared API shaped like `prepareDeployStaging(o: { manifestFilter?: string; extraAssetGlobs?: string[]; entryBin: string; outStageRoot: string }): Promise<void>` (the sole consumption entry for Task 5.2)
 
-- [ ] **Step 1: 机械提取**：把 python 脚本 L245-269/360-376 区域整体搬入 staging.ts，class 改函数参注（movational refactor，不删任何校验，包括 repo-root 保护检查与 DEPLOY_ONLY_DOCS 剔除）。
-- [ ] **Step 2: python 脚本回归**：`pnpm vitest run scripts/build-exe-for-python-sdk-native-pty.spec.ts --project thread-safe` → PASS（与新位置用例都过）。
-- [ ] **Step 3: duplication 门**：`pnpm run duplication` → PASS（对比提取前后报告确认下降）。
-- [ ] **Step 4: Commit**：`refactor(exe-packaging): extract deploy staging shared module from python sdk script`
+- [ ] **Step 1: mechanical extraction**: move the python script’s L245-269/360-376 regions wholesale into staging.ts, converting class state to function parameters (behavior-preserving refactor; delete no validation, including the repo-root guard and DEPLOY_ONLY_DOCS stripping).
+- [ ] **Step 2: python-script regression**: `pnpm vitest run scripts/build-exe-for-python-sdk-native-pty.spec.ts --project thread-safe` → PASS (old cases keep passing alongside their new home).
+- [ ] **Step 3: duplication gate**: `pnpm run duplication` → PASS (compare reports pre/post extraction to confirm the drop).
+- [ ] **Step 4: Commit**: `refactor(exe-packaging): extract deploy staging shared module from python sdk script`
 
 ### Task 5.2: `scripts/build-exe-for-desktop.ts`
 
 **Files:**
 - Create: `scripts/build-exe-for-desktop.ts`
-- Modify: 根 `package.json` 增加 script `"build:exe:desktop": "tsx scripts/build-exe-for-desktop.ts"`
-- Test: `scripts/build-exe-for-desktop.spec.ts`（CLI 解析与 targets 校验级别即可）
+- Modify: root `package.json` gains the `"build:exe:desktop": "tsx scripts/build-exe-for-desktop.ts"` script
+- Test: `scripts/build-exe-for-desktop.spec.ts` (CLI-parse and target-validation level suffices)
 
 **Interfaces:**
-- Consumes: Task 5.1 共享模块
-- Produces: `dist-desktop/dsh-desktop-server-<platform>-<arch>[.exe]` 四产物命名 + 同名 `-rg` ripgrep 副产物
+- Consumes: the Task 5.1 shared module
+- Produces: four artifacts named `dist-desktop/dsh-desktop-server-<platform>-<arch>[.exe]` plus same-named `-rg` ripgrep companions
 
-与 python 脚本的四点差异（全部显式写在脚本头注释）：
-1. `PLATFORMS/ARCHES` → `['linux','win32','darwin'] × ['x64','arm64']` 的 desktop 白名单交集 `[win-x64, linux-x64, linux-arm64, darwin-arm64]`。
-2. deploy 对象是 `apps/cli`（一个 synthetic deploy manifest：`pnpm --filter @deepseek-ai/dsh-desktop-server-manifest deploy …`？**否**——`apps/cli` 本体即 deploy 目标，参照 python 脚本 deploy jsonrpc-demo 包的方式，`--legacy --prod` 收 apps/cli 的 70 项 closure）。
-3. `ENTRY_BIN = 'node_modules/@deepseek-ai/dsh/lib/bin.js'`；injectPkgConfig 的 bin 字段指向它，argv 由 SidecarManager 传入（`--profile desktop --port N --no-open`）。
-4. **`extraAssetGlobs: ['**/cordis.patch.yml']`** —— SEA asset 白名单没有这一条，desktop bundle 的 patch 进不了 exe（这是本次打包链路最易漏的一点）。
+Four differences from the python script (all stated explicitly in the script-header comment):
+1. `PLATFORMS/ARCHES` become the desktop whitelist intersection of `['linux','win32','darwin'] × ['x64','arm64']`: `[win-x64, linux-x64, linux-arm64, darwin-arm64]`.
+2. The deploy object is `apps/cli` (a synthetic deploy manifest via `pnpm --filter @deepseek-ai/dsh-desktop-server-manifest deploy …`? **No** — `apps/cli` itself is the deploy target; following how the python script deploys the jsonrpc-demo package, `--legacy --prod` collects apps/cli’s ~70-item closure).
+3. `ENTRY_BIN = 'node_modules/@deepseek-ai/dsh/lib/bin.js'`; injectPkgConfig points its bin field there while SidecarManager passes argv (`--profile desktop --port N --no-open`).
+4. **`extraAssetGlobs: ['**/cordis.patch.yml']`** — without this SEA asset whitelist entry the desktop bundle patches never enter the exe (the most-missed point of this packaging chain).
 
-- [ ] **Step 1: 实现 CLI parse**（parseArgs：`--targets`、`--skip-build`、`--dry-run`）+ `verifyClosure()`（启动即断言 patch yml glob 命中数 ≥3：base/web-app/desktop-app）+ pack 四 target 循环。
-- [ ] **Step 2: dry-run 自证**：`pnpm run build:exe:desktop --dry-run` 打印计划不执行 → `git status` 干净。
-- [ ] **Step 3: Linux 本机实打一轮（host 架构单目标）** → `dist-desktop/dsh-desktop-server-linux-*` 存在 → **冒烟：spawn 它 `--profile desktop --no-open --port <pickFreePort 结果>`**。端口语义在此定案（覆盖任何摇摆说法）：**SidecarManager 自选空闲端口经 argv 直传**（Task 4.2 的原生契约）；不使用 `--port 0` + stdout 解析方案，理由——它依赖未在此处验证的 URL 打印协议文本，且方案 A 的毫秒级 TOCTOU 窗口由 probe 失败诊断兜底，控制面全部在本方。冒烟判据：probe 就绪 → `GET /` 返回 HTML → SIGTERM 进程零残留。
-- [ ] **Step 4: Commit**：`feat(desktop): package sidecar exe via shared staging module (yml assets included)`
+- [ ] **Step 1: implement CLI parsing** (parseArgs: `--targets`, `--skip-build`, `--dry-run`) + `verifyClosure()` (assert at startup that the patch-yml glob hits ≥3: base/web-app/desktop-app) + pack loop over four targets.
+- [ ] **Step 2: dry-run self-proof**: `pnpm run build:exe:desktop --dry-run` prints the plan executing nothing → `git status` stays clean.
+- [ ] **Step 3: one real local Linux pack round (single host-arch target)** → `dist-desktop/dsh-desktop-server-linux-*` exists → **smoke: spawn it with `--profile desktop --no-open --port <pickFreePort result>`**. Port semantics settle here (overriding any wavering earlier wording): **SidecarManager picks a free port itself and passes it via argv** (the native Task 4.2 contract); the `--port 0` + stdout-parsing option is rejected because it leans on URL-print protocol text unverified here, and its millisecond TOCTOU window falls back to probe-failure diagnostics anyway — the control plane stays entirely ours. Smoke criteria: probe ready → `GET /` returns HTML → SIGTERM leaves zero residue.
+- [ ] **Step 4: Commit**: `feat(desktop): package sidecar exe via shared staging module (yml assets included)`
 
-### Task 5.3: electron-builder 配置 + 产物合一
+### Task 5.3: electron-builder config + artifact consolidation
 
 **Files:**
 - Create: `apps/desktop/electron-builder.yml`
-- Modify: `apps/desktop/package.json`（script `"dist": "electron-builder --config electron-builder.yml"`）
+- Modify: `apps/desktop/package.json` (script `"dist": "electron-builder --config electron-builder.yml"`)
 
 **Interfaces:**
-- Consumes: Task 5.2 的 `dist-desktop/*`（extraResources）
-- Produces: `apps/desktop/dist-artifacts/` 下 NSIS exe / AppImage
+- Consumes: the Task 5.2 `dist-desktop/*` outputs (extraResources)
+- Produces: NSIS exe / AppImage under `apps/desktop/dist-artifacts/`
 
-- [ ] **Step 1: 写配置**
+- [ ] **Step 1: write the config**
 
 ```yaml
 appId: ai.harnessment.dsh.desktop
@@ -715,51 +717,51 @@ nsis: { oneClick: true, perMachine: false }
 publish: { provider: github, owner: deepseek-harness, repo: deepseek-harness }
 ```
 
-- [ ] **Step 2: linux 本机 dist 一轮 + 安装冒烟**（AppImage 直接执行 → 窗口 → 对话 UI → 退出无孤儿）。
-- [ ] **Step 3: Commit**：`build(desktop): electron-builder targets nsis/appimage with sidecar extraResources`
+- [ ] **Step 2: local linux dist round + install smoke** (run the AppImage directly → window → conversation UI → exit with no orphans).
+- [ ] **Step 3: Commit**: `build(desktop): electron-builder targets nsis/appimage with sidecar extraResources`
 
 ---
 
-## Phase 6 — CI 发布流水线
+## Phase 6 — CI release pipeline
 
 ### Task 6.1: `desktop-release.yml`
 
 **Files:**
 - Create: `.github/workflows/desktop-release.yml`
-- Read first: `.github/workflows/build-exe-for-python-sdk.yml`（矩阵/setup 手法母版）
+- Read first: `.github/workflows/build-exe-for-python-sdk.yml` (matrix/setup master template)
 
 **Interfaces:**
-- Consumes: Tasks 5.2/5.3 产物路径、`secrets.GITHUB_TOKEN`
-- Produces: tag `dsh-v*` push 或 manual dispatch → GitHub Release 附四平台安装包 + latest.yml（electron-updater 元数据自动生成）
+- Consumes: the Task 5.2/5.3 artifact paths and `secrets.GITHUB_TOKEN`
+- Produces: a `dsh-v*` tag push or manual dispatch → GitHub Release carrying four-platform installers + latest.yml (electron-updater metadata generated automatically)
 
-- [ ] **Step 1: 三 job 矩阵**：`windows-latest`（win-x64 NSIS）、`ubuntu-22.04`（AppImage x64）、`ubuntu-24.04-arm`（AppImage arm64，若 arm runner 在组织层不可用则以 qemu/binfmt 构建并在 job 输出标注）。macOS dmg job 设 `continue-on-error: true`（一期降级承诺）。共用步骤：checkout → pnpm/node setup → `pnpm install --frozen-lockfile` → `pnpm run build:lib && pnpm run build:web` → `pnpm run build:exe:desktop --targets <matrix-target>` → `electron-builder --publish always`（tag 场景）/draft（dispatch 场景）。
-- [ ] **Step 2: release 家族影响核验**：`pnpm run release:verify --dry-run`（若无 dry-run 则跑 verify 前置检查分支）确认 apps/desktop 的 public 包身份不炸 verifyPublishable；版本跟 dsh 家族 bump。
-- [ ] **Step 3: Commit**：`ci(desktop): three-platform release pipeline publishing to github releases`
+- [ ] **Step 1: three-job matrix**: `windows-latest` (win-x64 NSIS), `ubuntu-22.04` (AppImage x64), `ubuntu-24.04-arm` (AppImage arm64; where an arm runner is organizationally unavailable, build via qemu/binfmt and annotate in the job output). The macOS dmg job sets `continue-on-error: true` (phase-one degraded promise). Shared steps: checkout → pnpm/node setup → `pnpm install --frozen-lockfile` → `pnpm run build:lib && pnpm run build:web` → `pnpm run build:exe:desktop --targets <matrix-target>` → `electron-builder --publish always` (tag runs) / draft (dispatch runs).
+- [ ] **Step 2: release-family impact check**: `pnpm run release:verify --dry-run` (or the verify precondition branch when no dry-run exists) confirms apps/desktop’s public package identity does not trip verifyPublishable; versions bump with the dsh family.
+- [ ] **Step 3: Commit**: `ci(desktop): three-platform release pipeline publishing to github releases`
 
 ---
 
-## Phase 7 — DoD 验收 + Agent Note
+## Phase 7 — DoD acceptance + Agent Note
 
-### Task 7.1: 验收清单执行
+### Task 7.1: execute the acceptance checklist
 
 **Files:**
-- Create: `.agents/notes/plans/desktop-dod-checklist.md`（可勾选清单，PR 关联）
+- Create: `.agents/notes/plans/desktop-dod-checklist.md` (checkable list, linked from the PR)
 
-- [ ] 逐条执行 spec「验收标准」四条（Win11 x64 / Ubuntu 22.04 x64 / macOS arm64 continue-on-error / 卸载保数据）；窗口冷启动 ≤10s 计时方式：日志时间戳差。
-- [ ] 真实对话一轮需 `DEEPSEEK_API_KEY`；无 key 环境（CI）跳到 snapshot/包级证据为止，人工清单留待有 key 环境执行并回填。
+- [ ] Execute the four spec acceptance criteria one by one (Win11 x64 / Ubuntu 22.04 x64 / macOS arm64 continue-on-error / uninstall keeps data); cold-start ≤10 s timing method: log timestamp deltas.
+- [ ] One real conversation round needs `DEEPSEEK_API_KEY`; keyless environments (CI) stop at snapshot/package-level evidence, leaving manual checklist rows to be executed and backfilled where a key exists.
 
-### Task 7.2: Agent Note（non-trivial change 强制件）
+### Task 7.2: Agent Note (mandatory for a non-trivial change)
 
 **Files:**
 - Create: `.agents/notes/implemented/architecture/2026-MM-DD-desktop-phase-one-sidecar.md`
 
-- [ ] 内容必须含：C 路线分期理由；spike 结论（Task 0.1）；`--port 0`+stdout 解析 vs 显式端口的定案及依据；env 继承反向决策；二期 carrier 化的两个前置（Electron Node ≥22.19、koffi ABI）。按 `dsh-archive-agent-notes` 技能的归档规矩写 frontmatter。
-- [ ] Commit：`docs(notes): record desktop phase-one decisions`
+- [ ] Contents must include: the option-C phasing rationale; the spike conclusion (Task 0.1); the settled call plus rationale between `--port 0`+stdout parsing vs explicit port; the env-inheritance reversal decision; the two phase-two carrier prerequisites (Electron Node ≥22.19, koffi ABI). Write frontmatter per the `dsh-archive-agent-notes` skill archiving conventions.
+- [ ] Commit: `docs(notes): record desktop phase-one decisions`
 
 ---
 
-## Self-Review 记录（已完成）
+## Self-Review record (completed)
 
-- **Spec coverage**：六组件 → bundle（Task 1.x）、打包脚本（5.2）、CI（6.1）、updater（4.4）、Agent Note（7.2）齐；ui-onboarding 按 YAGNI 更正为 Task 3.0 验证既有能力（偏差已向用户声明）；R1→Task 0.1、R2→6.1 大资产分段下载缺省启用、R3→4.4 feed 可配置、R4→Task 2.1 dev/prod 同一 profile 组合。
-- **Placeholder scan**：无 TBD/TODO；两处「Read first + 对照母版」（browser-open.spec.ts、workflows 矩阵）是有意为之的事实引路而非代码占位。
-- **Type consistency**：`SidecarState`/`UpdateFeed`/`prepareDeployStaging` 各处名称一致；端口语义已在 Task 5.2 定案为「Manager 自选空闲端口 argv 直传」，与 Task 4.2 的接口契约一致，无跨阶段歧义。
+- **Spec coverage**: six components all covered — bundle (Task 1.x), packaging script (5.2), CI (6.1), updater (4.4), Agent Note (7.2); ui-onboarding corrected by YAGNI to verifying the existing capability in Task 3.0 (the deviation was declared to the user); R1→Task 0.1, R2→6.1 large-asset chunked download enabled by default, R3→4.4 configurable feed, R4→Task 2.1 dev/prod sharing one profile composition.
+- **Placeholder scan**: no TBD/TODO anywhere; the two “Read first + master template” pointers (browser-open.spec.ts, workflows matrix) deliberately route to facts rather than stubbing code.
+- **Type consistency**: `SidecarState`/`UpdateFeed`/`prepareDeployStaging` names agree everywhere; port semantics were settled at Task 5.2 as “Manager picks a free port, passed via argv,” matching the Task 4.2 interface contract with no cross-phase ambiguity.
