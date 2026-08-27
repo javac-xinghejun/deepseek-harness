@@ -12,8 +12,8 @@ The renderer loads `http://127.0.0.1:<port>` from the sidecar, so the interactio
 - `src/main/sidecar-manager.ts` — spawn → TCP probe → ready/crash-restart/teardown state machine (pure node, unit-tested).
 - `src/main/window-manager.ts` — single-window creation, error page swap, the one whitelisted IPC verb (`openLogsDir`).
 - `src/main/updater.ts` / `updater-config.ts` — electron-updater binding plus the pure feed-resolution decision.
-- `src/preload/index.cjs` — sandboxed CommonJS bridge; channel names are pinned to `api-names.ts` by tests.
-- `src/renderer/error.html` — self-contained recovery page for a failed start.
+- `resources/preload/index.cjs` — sandboxed CommonJS bridge; channel names are pinned to `api-names.ts` by tests.
+- `resources/renderer/error.html` — self-contained recovery page for a failed start.
 
 ## Development
 

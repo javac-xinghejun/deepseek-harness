@@ -746,12 +746,12 @@
     "apps/desktop": {
       "entry": [
         "src/main/main.ts",
-        "src/preload/index.cjs",
-        "src/renderer/error.html",
+        "resources/preload/index.cjs",
+        "resources/renderer/error.html",
         "tests/**/*.spec.ts"
       ],
       "project": [
-        "src/**/*.{ts,cjs}",
+        "src/**/*.ts",
         "tests/**/*.ts"
       ]
     },

@@ -12,8 +12,8 @@ renderer 加载 sidecar 的 `http://127.0.0.1:<port>`，因此交互链路与浏
 - `src/main/sidecar-manager.ts` —— spawn → TCP 探测 → 就绪/崩溃重启/回收状态机（纯 node，单测覆盖）。
 - `src/main/window-manager.ts` —— 单实例窗口、错误页切换、唯一白名单 IPC 通道（`openLogsDir`）。
 - `src/main/updater.ts` / `updater-config.ts` —— electron-updater 绑定与纯函数的 feed 解析决策。
-- `src/preload/index.cjs` —— 沙箱化的 CommonJS 桥；通道名由测试钉死在 `api-names.ts`。
-- `src/renderer/error.html` —— 启动失败时的自包含恢复页。
+- `resources/preload/index.cjs` —— 沙箱化的 CommonJS 桥；通道名由测试钉死在 `api-names.ts`。
+- `resources/renderer/error.html` —— 启动失败时的自包含恢复页。
 
 ## Development
 

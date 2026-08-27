@@ -65,8 +65,7 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   // sandboxed preload and recovery page it references by relative path.
   '@deepseek-ai/dsh-desktop': [
     'lib/main/**/*.js',
-    'src/preload/index.cjs',
-    'src/renderer/error.html',
+    'resources',
     '!lib/**/*.{d.ts,d.ts.map,js.map}',
   ],
 }

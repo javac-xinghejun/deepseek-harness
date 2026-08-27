@@ -89,7 +89,7 @@ function spawnWindow(app: App): BrowserWindow {
     show: false,
     webPreferences: {
       ...SECURITY_FLAGS,
-      preload: fileURLToPath(new URL('../../src/preload/index.cjs', import.meta.url)),
+      preload: fileURLToPath(new URL('../../resources/preload/index.cjs', import.meta.url)),
     },
   })
   window.once('ready-to-show', () => { window.show() })
@@ -112,7 +112,7 @@ function spawnWindow(app: App): BrowserWindow {
  * @returns a data: URL carrying the completed document.
  */
 function renderErrorDocument(code: string, description: string): string {
-  const path = fileURLToPath(new URL('../../src/renderer/error.html', import.meta.url))
+  const path = fileURLToPath(new URL('../../resources/renderer/error.html', import.meta.url))
   const body = readFileSync(path, 'utf8')
     .replace('DSH_DIAGNOSTIC_CODE', escapeHtml(code))
     .replace('DSH_DIAGNOSTIC_TEXT', escapeHtml(description))

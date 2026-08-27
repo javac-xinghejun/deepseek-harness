@@ -20,9 +20,9 @@
     "dist": "electron-builder --config electron-builder.yml"
   },
   "files": [
-    "lib",
-    "src/preload/index.cjs",
-    "src/renderer/error.html"
+    "lib/main/**/*.js",
+    "resources",
+    "!lib/**/*.{d.ts,d.ts.map,js.map}"
   ],
   "license": "MIT",
   "devDependencies": {

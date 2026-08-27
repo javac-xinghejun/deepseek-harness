@@ -18,7 +18,7 @@ describe('desktop shell bootstrap', () => {
     // The sandbox forbids importing TS contracts in the preload, so this
     // parse-level check is the anti-drift seam between index.cjs and
     // MAIN_PROCESS_API.
-    const source = readFileSync(join(import.meta.dirname, '../src/preload/index.cjs'), 'utf8')
+    const source = readFileSync(join(import.meta.dirname, '../resources/preload/index.cjs'), 'utf8')
     const channels = [...source.matchAll(/ipcRenderer\.invoke\('([^']+)'\)/gu)].map(match => match[1])
     expect(channels).toEqual([...Object.values(MAIN_PROCESS_API)])
   })
