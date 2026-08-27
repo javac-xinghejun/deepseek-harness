@@ -126,11 +126,13 @@ export async function prepareDeployStaging(options: DeployStagingOptions): Promi
     '--config.link-workspace-packages=true',
     stagingDir,
   ])
-  if (options.hoistSourceNodeModules !== undefined) {
-    await restoreLegacyHoists({ ...options, hoistSourceNodeModules: options.hoistSourceNodeModules })
+  const hoistSource = options.hoistSourceNodeModules
+  if (hoistSource !== undefined) {
+    await restoreLegacyHoists(options, hoistSource)
   }
-  if (options.extraPackageSources !== undefined) {
-    await restoreOverridePackages(options)
+  const extraSources = options.extraPackageSources
+  if (extraSources !== undefined) {
+    await restoreOverridePackages(options, extraSources)
   }
   await materializeStagedLinks(options)
   if (options.dryRun) {
@@ -146,7 +148,7 @@ export async function prepareDeployStaging(options: DeployStagingOptions): Promi
  * so package-local node_modules trees are omitted to preserve one flat Cordis
  * instance and a symlink-free packaged payload.
  */
-async function restoreLegacyHoists(options: DeployStagingOptions & Required<Pick<DeployStagingOptions, 'hoistSourceNodeModules'>>): Promise<void> {
+async function restoreLegacyHoists(options: DeployStagingOptions, hoistSourceNodeModules: string): Promise<void> {
   if (options.dryRun) {
     console.log(`${options.logPrefix}: [dry-run] restore direct dependencies omitted by legacy deploy`)
     return
@@ -156,7 +158,7 @@ async function restoreLegacyHoists(options: DeployStagingOptions & Required<Pick
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
     dependencies?: Record<string, string>
   }
-  const sourceNodeModules = resolve(options.root, options.hoistSourceNodeModules)
+  const sourceNodeModules = resolve(options.root, hoistSourceNodeModules)
   const restored: string[] = []
   for (const dependency of Object.keys(manifest.dependencies ?? {}).sort()) {
     const destination = join(stagingDir, 'node_modules', dependency)
@@ -296,13 +298,14 @@ async function copyDereferenced(sourceDir: string, destinationDir: string): Prom
  * the stage fails loud rather than shipping a runtime with a missing peer.
  */
 async function restoreOverridePackages(
-  options: DeployStagingOptions & Required<Pick<DeployStagingOptions, 'extraPackageSources'>>,
+  options: DeployStagingOptions,
+  extraPackageSources: Readonly<Record<string, string>>,
 ): Promise<void> {
   if (options.dryRun) {
     console.log(`${options.logPrefix}: [dry-run] restore override-linked packages`)
     return
   }
-  for (const [packageName, relative] of Object.entries(options.extraPackageSources).sort()) {
+  for (const [packageName, relative] of Object.entries(extraPackageSources).sort()) {
     const destination = join(options.stagingDir, 'node_modules', packageName)
     if (existsSync(destination)) continue
     const source = resolve(options.root, relative)
@@ -565,7 +568,13 @@ export interface ExeCliOptions<T> {
  * @returns the validated invocation.
  */
 export function parseExeBuildCli<T>(argv: string[], options: ExeCliOptions<T>): ExePackagingCli<T> {
-  let values: ReturnType<typeof parseArgs>['values']
+  interface CliValues {
+    targets?: string
+    'skip-build': boolean
+    'dry-run': boolean
+    help: boolean
+  }
+  let values: CliValues
   try {
     values = parseArgs({
       args: argv,
@@ -575,7 +584,7 @@ export function parseExeBuildCli<T>(argv: string[], options: ExeCliOptions<T>): 
         'dry-run': { type: 'boolean', default: false },
         'help': { type: 'boolean', default: false },
       },
-    }).values
+    }).values as unknown as CliValues
   } catch (error) {
     console.error(`${options.logPrefix}: ${error instanceof Error ? error.message : String(error)}\n`)
     console.error(options.usage())
