@@ -1,0 +1,68 @@
+name: desktop-release
+
+# Build the DeepSeek Harness Desktop installers and publish them to GitHub
+# Releases. Tag pushes (`dsh-v*`) publish the artifacts on release; dispatches
+# produce draft artifacts for validation only. The macOS leg carries phase
+# one's degraded promise: it must build, not distribute well.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'dsh-v*'
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  # CI runs must never report to the production telemetry endpoint baked
+  # into apps/cli/cordis.yml (AppCLIEntry disables the row when set).
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            targets: node24-win-x64
+          - os: ubuntu-22.04
+            targets: node24-linux-x64
+          - os: ubuntu-24.04-arm
+            targets: node24-linux-arm64
+          - os: macos-latest
+            targets: node24-macos-arm64
+            # Phase one downgrades macOS to build-only quality.
+            continue-on-error: true
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.continue-on-error == true }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build workspace artifacts
+        run: |
+          pnpm run build:lib
+          pnpm run build:web
+      - name: Package the sidecar executable
+        run: pnpm exec tsx scripts/build-exe-for-desktop.ts --targets=${{ matrix.targets }} --skip-build
+      - name: Bundle the installer
+        working-directory: apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Tag builds publish straight onto the release; dispatch builds land as
+        # drafts so nothing unverifiable reaches users.
+        run: >-
+          pnpm exec electron-builder --config electron-builder.yml
+          ${{ github.event_name == 'push' && '--publish always' || '--publish draft' }}

@@ -1,0 +1,30 @@
+appId: ai.deepseek-harness.desktop
+productName: DeepSeek Harness Desktop
+directories:
+  output: dist-artifacts
+files:
+  - lib/main/**/*.js
+  - '!lib/**/*.{d.ts,d.ts.map,js.map}'
+  - resources/**/*
+extraResources:
+  - from: ../dist-desktop/
+    to: sidecar/
+    filter:
+      - dsh-desktop-server-*
+win:
+  target: nsis
+linux:
+  target: AppImage
+  category: Utility
+mac:
+  # Phase one ships unsigned; set `identity` (and notarization inputs) when a
+  # Developer ID certificate is available.
+  target: dmg
+  identity: null
+nsis:
+  oneClick: true
+  perMachine: false
+publish:
+  provider: github
+  owner: deepseek-harness
+  repo: deepseek-harness
