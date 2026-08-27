@@ -1,0 +1,10 @@
+# Stacks strictly after @deepseek-ai/dsh-web-app: a desktop shell owns the
+# window, so the composed web runtime must never hand off to the system
+# browser. A patch replaces the targeted row's whole `config`, so every key
+# the row owns is restated here; the `webStartup` expressions stay untouched.
+- id: web-runtime
+  config:
+    openBrowser: false
+    printUrl: true
+    surfaceContext: true
+    trustedHosts: !!js ctx.webStartup.trustedHosts
