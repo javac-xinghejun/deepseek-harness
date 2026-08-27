@@ -9,7 +9,7 @@ const root = process.argv[2]
 if (root === undefined) throw new Error('usage: smoke-sidecar.ts <server-path>')
 const logs = mkdtempSync(join(tmpdir(), 'dsh-smoke-'))
 const manager = new SidecarManager()
-const states = []
+const states: string[] = []
 manager.onStateChange((state) => { states.push(state.kind) })
 
 try {
