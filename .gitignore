@@ -21,6 +21,10 @@ tmp/
 .claude/commands/
 .claude/launch.json
 .claude/settings.json
+.claude/settings.local.*
+.omc/
+
+
 .vscode/
 .DS_Store
 .idea
@@ -39,3 +43,5 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
+
+test-files/
