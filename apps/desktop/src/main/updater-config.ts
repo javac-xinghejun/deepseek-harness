@@ -23,7 +23,7 @@ export interface UpdaterConfigInput {
 }
 
 /** The default feed every shipping artifact targets. */
-export const DEFAULT_UPDATE_FEED: Extract<UpdateFeed, { provider: 'github' }> = {
+const DEFAULT_UPDATE_FEED: Extract<UpdateFeed, { provider: 'github' }> = {
   provider: 'github',
   owner: 'deepseek-harness',
   repo: 'deepseek-harness',

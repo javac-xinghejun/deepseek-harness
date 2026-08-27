@@ -31,7 +31,7 @@ const FEED_FILE = 'update-feed.json'
  * @param userDataDir - the shell's userData directory.
  * @returns the validated update feed.
  */
-export function resolveUpdateFeed(userDataDir: string): ReturnType<typeof readUpdaterConfig> {
+function resolveUpdateFeed(userDataDir: string): ReturnType<typeof readUpdaterConfig> {
   const fromEnv = process.env[FEED_ENV]
   if (fromEnv !== undefined && fromEnv !== '') {
     return readUpdaterConfig(parseFeedJson(FEED_ENV, fromEnv))

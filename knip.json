@@ -743,6 +743,18 @@
         "react-dom"
       ]
     },
+    "apps/desktop": {
+      "entry": [
+        "src/main/main.ts",
+        "src/preload/index.cjs",
+        "src/renderer/error.html",
+        "tests/**/*.spec.ts"
+      ],
+      "project": [
+        "src/**/*.{ts,cjs}",
+        "tests/**/*.ts"
+      ]
+    },
     "apps/cli": {
       "entry": [
         "tests/**/*.spec.ts",
