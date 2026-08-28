@@ -6,6 +6,10 @@
 # in-repo form stays LF; CRLF becomes checkout-time presentation only.
 * text=auto eol=lf
 
+# cmd.exe misparses some LF-only batch constructs; the in-repo form stays LF,
+# and CRLF becomes checkout-time presentation only.
+*.cmd text eol=crlf
+
 *.pdf binary
 
 # Pairing records are generated from the three confirmed owner-blob pairs.
