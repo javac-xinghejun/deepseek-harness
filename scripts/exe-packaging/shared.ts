@@ -60,10 +60,16 @@ export async function runStep(
     return
   }
   console.log(`${options.logPrefix}: ${label}: ${printable}`)
+  // Windows can only execute .cmd/.npm shims through a shell (Node >=20.12
+  // spawns them with EINVAL otherwise), and shell mode joins args verbatim,
+  // so space-bearing arguments carry their own quotes.
+  const useShell = process.platform === 'win32'
+  const spawnArgs = useShell ? args.map(arg => (arg.includes(' ') ? `"${arg}"` : arg)) : args
   await new Promise<void>((resolvePromise, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(command, spawnArgs, {
       cwd: options.root,
       stdio: 'inherit',
+      shell: useShell,
       // Artifact builds must not mutate or validate a developer's Git hooks.
       env: { ...process.env, CI: 'true' },
     })
@@ -493,25 +499,32 @@ export async function packTarget(options: PackTargetOptions): Promise<string[]> 
 async function copyRipgrepSidecar(options: PackTargetOptions, product: string): Promise<string> {
   // macOS manifests as `macos` in pkg triples but `darwin` on disk.
   const diskPlatform = options.target.platform === 'macos' ? 'darwin' : options.target.platform
+  const isWindows = options.target.platform === 'win'
   const source = join(
     options.stagingDir,
     'node_modules',
     '@vscode',
     `ripgrep-${diskPlatform}-${options.target.arch}`,
     'bin',
-    'rg',
+    isWindows ? 'rg.exe' : 'rg',
   )
-  const destination = `${product}-rg`
+  // The harness resolves the sidecar as `${process.execPath}-rg`; on Windows
+  // CreateProcess needs an .exe name to execute, so ship both.
+  const destinations = isWindows ? [`${product}-rg`, `${product}-rg.exe`] : [`${product}-rg`]
   if (options.dryRun) {
-    console.log(`${options.logPrefix}: [dry-run] cp ${source} ${destination}`)
-    return destination
+    for (const destination of destinations) {
+      console.log(`${options.logPrefix}: [dry-run] cp ${source} ${destination}`)
+    }
+    return destinations[0] ?? `${product}-rg`
   }
   if (!existsSync(source)) {
     throw new Error(`${options.logPrefix}: target ripgrep binary is missing at ${source}.`)
   }
-  await copyFile(source, destination)
-  await chmod(destination, 0o755)
-  return destination
+  for (const destination of destinations) {
+    await copyFile(source, destination)
+    if (!isWindows) await chmod(destination, 0o755)
+  }
+  return destinations[0] ?? `${product}-rg`
 }
 
 /**
