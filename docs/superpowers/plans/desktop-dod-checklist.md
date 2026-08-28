@@ -8,18 +8,18 @@ Acceptance criteria from the approved spec, with current evidence. Real-platform
 
 ## 1. Windows 10/11 x64
 
-- [ ] Download → install NSIS → cold start UI within 10 s. **Blocked** by the packaged-bin SEA blocker (Agent Note §Spike findings).
+- [ ] Download → install NSIS → cold start UI within 10 s. Sidecar contract unblocked (Agent Note §Spike findings); needs a `desktop-release.yml` dispatch — koffi's win collection has never run on a real Windows runner.
 - [ ] No key → onboarding wizard; valid key → one real conversation round.
 - [ ] In-app end-to-end update round (electron-updater over GitHub Releases).
 
 ## 2. Ubuntu 22.04+ x64
 
-- [ ] AppImage reaches the same bar as Windows. **Blocked** by the same blocker; the sidecar itself boots under host Node (`scripts/smoke-sidecar.ts` evidence chain).
-- [x] Sidecar exe composition passes: staged closure serves `dsh web` (host-node probe), `--dump-default-config` exits 0 inside the packaged binary.
+- [ ] AppImage reaches the same bar as Windows.
+- [x] Packaged SEA sidecar end to end: `SMOKE OK` via `scripts/smoke-sidecar.ts` — probe → `GET /` returns the app HTML → bounded SIGTERM teardown.
 
 ## 3. macOS arm64
 
-- [ ] dmg builds and a manual basic walkthrough succeeds (phase-one degraded promise, `continue-on-error` lane). **Blocked** by the same blocker for runtime behavior; electron-builder config is in place unsigned.
+- [ ] dmg builds and a manual basic walkthrough succeeds (phase-one degraded promise, `continue-on-error` lane); electron-builder config is in place unsigned.
 
 ## 4. Uninstall
 
@@ -33,5 +33,5 @@ Acceptance criteria from the approved spec, with current evidence. Real-platform
 
 ## Outstanding debts outside platforms
 
-- [ ] win-x64 `@yao-pkg/pkg` collection spike (koffi prebuilds) once the desktop packaged-bin entry exists.
+- [ ] win-x64 `@yao-pkg/pkg` collection spike (koffi prebuilds) on a real Windows runner (`desktop-release.yml` dispatch).
 - [ ] ui-settings-models onboarding dynamic verification with a real key (roster mount already verified statically).

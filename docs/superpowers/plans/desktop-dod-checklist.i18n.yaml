@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/superpowers/plans/desktop-dod-checklist.md
-desktop-dod-checklist.md: 45f6e2b308c8f84a9c14bc0b204f1d34d2e15b68
-desktop-dod-checklist.zh.md: dccedb4db3001cf20a7afadb8f79f5aab0cb364d
+desktop-dod-checklist.md: a44ccad870106da405f299552531cd0e9fad27ea
+desktop-dod-checklist.zh.md: be45deaf7eb6e84cc395a1a262931b8d2d45cafd

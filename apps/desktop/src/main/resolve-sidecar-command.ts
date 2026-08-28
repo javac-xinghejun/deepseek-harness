@@ -46,9 +46,11 @@ export function resolveSidecarCommand(env: NodeJS.ProcessEnv, layout: DesktopLay
       args: ['dsh', 'web', '--profile', 'desktop', '--no-open'],
     }
   }
+  // The packaged entry serves the composed config directly; it takes only
+  // web-surface flags (--port is appended by SidecarManager).
   return {
     command: join(layout.resourcesDir, 'sidecar', serverExecutableName()),
-    args: ['--profile', 'desktop', '--no-open'],
+    args: ['--no-open'],
   }
 }
 

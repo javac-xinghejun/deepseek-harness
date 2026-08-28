@@ -30,7 +30,7 @@ export function pnpmBin(): string {
  * @param args - its arguments.
  * @returns the printable command line.
  */
-export function formatCommand(command: string, args: string[]): string {
+function formatCommand(command: string, args: string[]): string {
   return [command, ...args].map(part => (part.includes(' ') ? JSON.stringify(part) : part)).join(' ')
 }
 
@@ -392,7 +392,7 @@ export async function injectPkgConfig(options: InjectPkgConfigOptions): Promise<
 }
 
 /** A parsed pkg target triple (`<nodeRange>-<platform>-<arch>`). */
-export interface PkgTarget {
+interface PkgTarget {
   /** pkg Node range (`node<major>`). */
   nodeRange: string
   /** pkg platform tag (`linux`, `macos`, or `win`). */

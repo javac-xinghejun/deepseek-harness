@@ -25,14 +25,17 @@ C 路线分两期（[spec](../../../../docs/superpowers/specs/2026-08-27-desktop
 
 **更新 feed 解析 fail loud**（env JSON → userData 文件 → 默认 GitHub Releases）；generic feed 缺 URL 在启动校验期抛错而非静默回退。
 
-## Spike 结论（2026-08-27）
+## Spike 结论（2026-08-27，当日闭环）
 
-linux-x64 本机证据链：全闭包收集成功（未压缩 sidecar 约 184 MB + 5.5 MB rg），SEA 内 `--dump-default-config` 通过（bundle patch 资产靠 `cordis.patch.yml` asset glob 进入快照——极易遗漏，缺了在加载期致命），staged 闭包在宿主 Node 下完整启动。过程中修正两点：
+linux-x64 证据链终局为绿：打包后的 SEA exe 完整启动组合、服务 Web 界面（`GET /` 返回应用 HTML）、SIGTERM 下有界回收——含原生资产共 202 MB（`scripts/smoke-sidecar.ts`）。三个发现，两个与产品相关：
 
 - vendored override 包（cordis 家族 + cosmokit/schemastery）会被 legacy deploy 整体丢弃；desktop 管线现在从 `vendor/` 回填它们，workspace 闭包其余部分从仓库源码回填。
-- **一期遗留阻断点**：插件行的动态裸名导入以真实文件系统上的 profile 目录为锚，而该处的 `profiles/node_modules` 符号链接无法指向 `/snapshot/...` 快照路径。宿主 Node 可启动；SEA 在 loader apply 阶段失败，尽管组合与资产都通过。修复方案是 desktop packaged-bin 入口直接从快照锚挂载组合好的 cordis.yml（`dsh-jsonrpc-demo/lib/packaged-bin.js` 先例），不再走 launcher profile。在该入口落地前，Windows/koffi 收集保持未验证状态；win-x64 spike workflow 因此未运行，结论记录于此而非计划中的独立 spike 笔记。
+- **internal loader 的目录 parent（即阻断点）**：运行期经 `loader.create` 挂载的行——宿主侧插件挂子行、agent preset 挂会话插件——经 Node 内部级联 loader 导入，parent 是 `ctx.baseUrl` 这个**目录 URL**；internal loader 把 parent 当文件、从其 dirname 向上找 node_modules，恰好跳过本快照的 node_modules（include 行从不踩坑，因为它们的 parent 是入口文件）。生成的入口对 `loader.internal.import` 做一次性包装，把目录 parent 规范化为同目录哨兵文件名。
+- **原生共享库**：sharp 的 libvips `.so` 需要显式的 `**/*.so*` asset glob。
 
-macOS 目标的对齐随 packaged-bin 工作一并决定；electron-builder 配置已按一期降级承诺保留未签名 dmg 席位（`identity: null`）。
+设计：打包管线在构建期把组合好的 `[dsh-base, dsh-web-app, dsh-desktop-app]` 条目列表 dump 为 `cordis.desktop.yml`（隔离 home 的 `--dump-config`，bundle 层的叠加与 dev 模式所见完全一致），并生成 `desktop-entry.mjs`，以 `bareModuleBaseUrl` 锚定自身快照启动该配置——即 `dsh-jsonrpc-demo/lib/packaged-bin.js` 的模式。sidecar 从此不再触碰 launcher profile；其 argv 只有 web 面旗标（`--no-open`，`--port` 由管理器追加），壳的 prod 契约因此去掉了 `--profile`。
+
+Windows/koffi 收集现在可通过 `desktop-release.yml` 在真实 Windows runner 上 dispatch 验证（该处仍待首次验证）；electron-builder 保留未签名 dmg 席位（`identity: null`）。
 
 ## 考虑过的备选
 
@@ -46,4 +49,4 @@ macOS 目标的对齐随 packaged-bin 工作一并决定；electron-builder 配�
 
 - 用户从 GitHub Releases 经 `desktop-release.yml` 获取每平台一个安装包（tag 发布 / dispatch 出草稿）；更新检查以固定 4 小时节拍轮询 `latest.yml`，feed 地址可配置。
 - 三元组 profile 在二期切换中保持不变，今天初始化的 profile 在 carrier 内嵌化后继续可用。
-- 在 packaged-bin 阻断点闭合之前，CI 安装包会携带无法启动的 sidecar；`desktop-release.yml` 必须保持 dispatch-only（草稿）或停用。平台验收欠账记录于 DoD 清单。
+- linux-x64 打包已端到端证实；`desktop-release.yml` dispatch 按平台产出草稿产物，Windows 原生（koffi）收集仍待首次真实 runner 运行。平台验收欠账记录于 DoD 清单。

@@ -8,18 +8,18 @@ Status: in-progress（自动化欠账记录于一期 [Agent Note](../../../.agen
 
 ## 1. Windows 10/11 x64
 
-- [ ] 下载 → 安装 NSIS → 10 秒内冷启动见到 UI。**被阻断**：packaged-bin 的 SEA 阻断点（Agent Note §Spike 结论）。
+- [ ] 下载 → 安装 NSIS → 10 秒内冷启动见到 UI。sidecar 契约已解锁（Agent Note §Spike 结论）；需一次 `desktop-release.yml` dispatch——koffi 的 win 收集从未在真实 Windows runner 上跑过。
 - [ ] 无 key 进入向导；有效 key 完成一轮真实对话。
 - [ ] 应用内端到端更新一轮（electron-updater 走 GitHub Releases）。
 
 ## 2. Ubuntu 22.04+ x64
 
-- [ ] AppImage 达到与 Windows 相同标准。**同一阻断点**；sidecar 本体已在宿主 Node 下可启动（`scripts/smoke-sidecar.ts` 证据链）。
-- [x] sidecar exe 组合通过：staged 闭包可服务 `dsh web`（宿主 Node 探针），打包产物内 `--dump-default-config` 以 0 退出。
+- [ ] AppImage 达到与 Windows 相同标准。
+- [x] 打包 SEA sidecar 端到端：经 `scripts/smoke-sidecar.ts` 得到 `SMOKE OK`——探测就绪 → `GET /` 返回应用 HTML → 有界 SIGTERM 回收。
 
 ## 3. macOS arm64
 
-- [ ] dmg 可构建且人工基本流程走通（一期降级承诺，`continue-on-error` 泳道）。**运行行为同受阻断**；electron-builder 配置已就绪（未签名）。
+- [ ] dmg 可构建且人工基本流程走通（一期降级承诺，`continue-on-error` 泳道）；electron-builder 配置已就绪（未签名）。
 
 ## 4. 卸载
 
@@ -33,5 +33,5 @@ Status: in-progress（自动化欠账记录于一期 [Agent Note](../../../.agen
 
 ## 平台之外的欠账
 
-- [ ] desktop packaged-bin 入口落地后再跑 win-x64 `@yao-pkg/pkg` 收集 spike（koffi 预编译产物）。
+- [ ] 在真实 Windows runner 上跑 win-x64 `@yao-pkg/pkg` 收集 spike（koffi 预编译产物，经 `desktop-release.yml` dispatch）。
 - [ ] 持真实 key 做 ui-settings-models 引导动态验证（roster 挂载已完成静态验证）。

@@ -24,8 +24,9 @@
   "workspaces": {
     ".": {
       "entry": [
-        "scripts/**/*.mjs",
         "scripts/**/*.cjs",
+        "scripts/**/*.mjs",
+        "scripts/smoke-sidecar.ts",
         "scripts/types/client-build-environment/index.d.ts"
       ],
       "ignoreUnresolved": [

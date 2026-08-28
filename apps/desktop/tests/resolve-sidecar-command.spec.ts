@@ -11,22 +11,24 @@ describe('resolveSidecarCommand', () => {
     expect(resolved.args).toContain('--no-open')
   })
 
-  it('prod selects the platform-named packaged executable under resources/sidecar', () => {
+  it('prod selects the platform-named packaged executable with web-surface flags only', () => {
     const resolved = resolveSidecarCommand({}, { resourcesDir: '/opt/resources' })
     const name = serverExecutableName()
     expect(resolved.command).toBe(`/opt/resources/sidecar/${name}`)
-    expect(resolved.args.slice(0, 3)).toEqual(['--profile', 'desktop', '--no-open'])
+    // The generated packaged entry mounts the composed config itself and has
+    // no launcher flag family; SidecarManager appends --port.
+    expect(resolved.args).toEqual(['--no-open'])
     expect(name.startsWith('dsh-desktop-server-')).toBe(true)
     if (process.platform === 'win32') expect(name.endsWith('.exe')).toBe(true)
     else expect(name.endsWith('.exe')).toBe(false)
   })
 
-  it('the dev face shares the exact prod profile combination', () => {
-    // Composition parity is the R4 mitigation: both faces must mount
-    // --profile desktop; only the runtime source differs.
+  it('both faces keep the browser handoff disabled', () => {
+    // Composition parity (R4): whichever face runs, a desktop shell must
+    // never hand off to the system browser; SidecarManager owns the port.
     const dev = resolveSidecarCommand({ DSH_DESKTOP_DEV: '1' }, { resourcesDir: '' })
     const prod = resolveSidecarCommand({}, { resourcesDir: '' })
-    expect(dev.args.join(' ')).toContain('--profile desktop')
-    expect(prod.args.join(' ')).toContain('--profile desktop')
+    expect(dev.args).toContain('--no-open')
+    expect(prod.args).toContain('--no-open')
   })
 })

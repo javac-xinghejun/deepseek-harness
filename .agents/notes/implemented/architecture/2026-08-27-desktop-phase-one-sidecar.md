@@ -25,14 +25,17 @@ Packaging centralizes deploy staging, pkg injection, native-pty placement, and C
 
 **Update feed resolution fails loud** (env JSON → userData file → default GitHub Releases); a generic feed without its URL throws at startup validation rather than silently falling back.
 
-## Spike findings (2026-08-27)
+## Spike findings (2026-08-27, closed same day)
 
-Local linux-x64 evidence chain: full closure collection succeeds (~184 MB uncompressed sidecar + 5.5 MB rg), `--dump-default-config` passes inside SEA (bundle patch assets included via the `cordis.patch.yml` asset glob — easy to miss, load-time fatal without it), and the staged closure boots completely under host Node. Two corrections surfaced along the way:
+Local linux-x64 evidence chain ends green: the packaged SEA exe boots the full composition, serves the web surface (`GET /` returns the app HTML), and tears down under SIGTERM — 202 MB with native assets (`scripts/smoke-sidecar.ts`). Three findings, two product-relevant:
 
 - Vendored override packages (`cordis` family + cosmokit/schemastery) drop out of legacy deploy entirely; the desktop pipeline backfills them from `vendor/` and the rest of the workspace closure from repository sources.
-- **Open phase-one blocker**: dynamic bare-name imports of plugin rows resolve against the real filesystem anchored at the profile directory, where `profiles/node_modules` symlinks cannot point into `/snapshot/...`. Host-node boot works; SEA boot fails at loader apply even though composition and assets pass. The fix is a desktop packaged-bin entry that mounts its composed cordis.yml from snapshot anchors directly (the `dsh-jsonrpc-demo/lib/packaged-bin.js` precedent), instead of walking launcher profiles. Windows/koffi collection remains unverified until that entry exists; the win-x64 spike workflow was therefore not run and stays recorded here instead of the planned separate note.
+- **Internal-loader directory parents (the blocker)**: rows mounted at runtime through `loader.create` — host-side plugins mounting children, agent presets mounting session plugins — import via Node's internal cascaded loader with `ctx.baseUrl`, a DIRECTORY url, as parent. The internal loader treats a parent as a file and walks up from its dirname, skipping this snapshot's node_modules entirely (include rows never hit this because their parent is the entry FILE). The generated entry wraps `loader.internal.import` once, normalizing directory parents onto a sentinel filename in the same directory.
+- **Native shared objects**: sharp's libvips `.so` files need explicit `**/*.so*` asset globs.
 
-Mac target parity follows whatever this entry work decides; electron-builder config already reserves the unsigned dmg seat with `identity: null`.
+Design: the pipeline dumps the composed `[dsh-base, dsh-web-app, dsh-desktop-app]` entry list to `cordis.desktop.yml` at build time (scratch-home `--dump-config`, so bundle layers apply exactly as dev mode sees them) and emits `desktop-entry.mjs`, which boots that config with `bareModuleBaseUrl` anchored inside its own snapshot — the `dsh-jsonrpc-demo/lib/packaged-bin.js` pattern. The sidecar never touches launcher profiles; its argv is web-surface flags only (`--no-open`, with `--port` appended by the manager), so the shell's prod contract dropped `--profile`.
+
+Windows/koffi collection is now runnable through a `desktop-release.yml` dispatch on a real Windows runner (still unverified there); electron-builder keeps the unsigned dmg seat with `identity: null`.
 
 ## Alternatives considered
 
@@ -46,4 +49,4 @@ Mac target parity follows whatever this entry work decides; electron-builder con
 
 - Users get one artifact per platform from GitHub Releases via `desktop-release.yml` (tag publish / dispatch draft); update checks poll `latest.yml` on a fixed 4h cadence behind a configurable feed.
 - The three-bundle tuple survives the phase-two transition unchanged, so profiles initialized today keep working when the carrier moves in-process.
-- Until the packaged-bin blocker closes, CI installers would ship a non-booting sidecar; `desktop-release.yml` must stay dispatch-only (drafts) or be disabled until then. The DoD checklist records the platform acceptance debts.
+- Linux-x64 packaging is proven end to end; `desktop-release.yml` dispatches produce draft artifacts per platform, with Windows native (koffi) collection still awaiting its first real-runner run. The DoD checklist records the platform acceptance debts.

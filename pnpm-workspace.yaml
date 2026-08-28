@@ -75,3 +75,8 @@ minimumReleaseAgeExclude:
 
 patchedDependencies:
   node-pty@1.2.0-beta.15: patches/node-pty@1.2.0-beta.15.patch
+
+# pnpm's pre-run dependency check fires implicit installs behind `pnpm run`
+# (under CI it prunes devDependencies mid-pipeline); installation policy above
+# already owns this, so scripts run without the extra pass.
+verifyDepsBeforeRun: false
