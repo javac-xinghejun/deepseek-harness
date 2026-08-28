@@ -14,8 +14,8 @@ const DEV_FLAG = 'DSH_DESKTOP_DEV'
 
 /** Host layout facts needed to place the packaged sidecar executable. */
 export interface DesktopLayout {
-  /** Absolute directory holding `sidecar/dsh-desktop-server-*` resources. */
-  resourcesDir: string
+  /** Absolute directory holding the `dsh-desktop-server-*` executable directly. */
+  sidecarDir: string
 }
 
 /** One resolved sidecar launch; `--port <N>` is appended by SidecarManager. */
@@ -49,7 +49,7 @@ export function resolveSidecarCommand(env: NodeJS.ProcessEnv, layout: DesktopLay
   // The packaged entry serves the composed config directly; it takes only
   // web-surface flags (--port is appended by SidecarManager).
   return {
-    command: join(layout.resourcesDir, 'sidecar', serverExecutableName()),
+    command: join(layout.sidecarDir, serverExecutableName()),
     args: ['--no-open'],
   }
 }
@@ -71,13 +71,13 @@ export function serverExecutableName(): string {
 
 /**
  * Layout for an unpackaged run: the repository's own packaging output next
- * to `apps/`. A packaged application passes `{ resourcesDir:
- * process.resourcesPath }` directly instead.
+ * to `apps/`. A packaged application passes `{ sidecarDir:
+ * join(process.resourcesPath, 'sidecar') }` directly instead.
  * @param entryUrl - import.meta.url of the calling built module (…/apps/desktop/lib/*).
- * @returns the development-side resources directory selection.
+ * @returns the development-side sidecar directory selection.
  */
 export function defaultLayout(entryUrl: string): DesktopLayout {
   // Relative to the FILE url: lib/ → apps/desktop → apps → repository root.
   const repoRoot = fileURLToPath(new URL('../../../..', entryUrl))
-  return { resourcesDir: join(repoRoot, 'dist-desktop') }
+  return { sidecarDir: join(repoRoot, 'dist-desktop') }
 }

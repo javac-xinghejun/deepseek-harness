@@ -17,7 +17,7 @@ import { initUpdater } from './updater.ts'
 /** The sidecar start carries the same composition in dev and prod faces. */
 const SIDECAR_LAUNCH = resolveSidecarCommand(
   process.env,
-  app.isPackaged ? { resourcesDir: process.resourcesPath } : defaultLayout(import.meta.url),
+  app.isPackaged ? { sidecarDir: join(process.resourcesPath, 'sidecar') } : defaultLayout(import.meta.url),
 )
 
 const manager = new SidecarManager()

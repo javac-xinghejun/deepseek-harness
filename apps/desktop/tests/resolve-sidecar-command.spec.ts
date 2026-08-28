@@ -5,14 +5,14 @@ import { resolveSidecarCommand, serverExecutableName } from '../src/main/resolve
 
 describe('resolveSidecarCommand', () => {
   it('dev flag selects the source-launched desktop composition through pnpm', () => {
-    const resolved = resolveSidecarCommand({ DSH_DESKTOP_DEV: '1' }, { resourcesDir: '/unused' })
+    const resolved = resolveSidecarCommand({ DSH_DESKTOP_DEV: '1' }, { sidecarDir: '/unused' })
     expect(resolved.command).toBe('pnpm')
     expect(resolved.args.slice(0, 4)).toEqual(['dsh', 'web', '--profile', 'desktop'])
     expect(resolved.args).toContain('--no-open')
   })
 
   it('prod selects the platform-named packaged executable with web-surface flags only', () => {
-    const resolved = resolveSidecarCommand({}, { resourcesDir: '/opt/resources' })
+    const resolved = resolveSidecarCommand({}, { sidecarDir: '/opt/resources/sidecar' })
     const name = serverExecutableName()
     expect(resolved.command).toBe(`/opt/resources/sidecar/${name}`)
     // The generated packaged entry mounts the composed config itself and has
@@ -26,8 +26,8 @@ describe('resolveSidecarCommand', () => {
   it('both faces keep the browser handoff disabled', () => {
     // Composition parity (R4): whichever face runs, a desktop shell must
     // never hand off to the system browser; SidecarManager owns the port.
-    const dev = resolveSidecarCommand({ DSH_DESKTOP_DEV: '1' }, { resourcesDir: '' })
-    const prod = resolveSidecarCommand({}, { resourcesDir: '' })
+    const dev = resolveSidecarCommand({ DSH_DESKTOP_DEV: '1' }, { sidecarDir: '' })
+    const prod = resolveSidecarCommand({}, { sidecarDir: '' })
     expect(dev.args).toContain('--no-open')
     expect(prod.args).toContain('--no-open')
   })
